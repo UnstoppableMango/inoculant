@@ -8,7 +8,7 @@ build:
 	nix build .#
 
 test:
-	$(GINKGO) run -r
+	$(GINKGO) run -r --skip-package=tests
 
 integration-test:
 	$(GINKGO) run -r ./tests/...
