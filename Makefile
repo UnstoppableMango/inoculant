@@ -11,7 +11,7 @@ test:
 	$(GINKGO) run -r
 
 integration-test:
-	$(GINKGO) run -r ./integration/...
+	$(GINKGO) run -r ./tests/...
 
 update:
 	nix flake update
