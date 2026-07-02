@@ -10,6 +10,9 @@ build:
 test:
 	$(GINKGO) run -r
 
+integration-test:
+	$(GINKGO) run -r ./integration/...
+
 update:
 	nix flake update
 

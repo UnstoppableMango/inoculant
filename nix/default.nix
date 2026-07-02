@@ -5,7 +5,7 @@
   version,
 }:
 buildGoApplication {
-  pname = "";
+  pname = "inoculant";
   inherit version;
 
   src = lib.cleanSource ../.;
