@@ -47,7 +47,7 @@
           packages.default = pkgs.callPackage ./nix { inherit version; };
 
           checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            nixos-inoculant = pkgs.nixosTest {
+            nixos-inoculant = pkgs.testers.nixosTest {
               name = "inoculant-nixos-integration";
               nodes.machine =
                 { pkgs, ... }:
