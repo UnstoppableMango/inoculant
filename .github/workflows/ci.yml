@@ -37,4 +37,4 @@ jobs:
         with:
           name: unstoppablemango
 
-      - run: nix develop -c make integration-test
+      - run: nix develop -c make test
