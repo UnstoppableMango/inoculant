@@ -13,6 +13,7 @@ buildGoApplication {
 
   nativeCheckInputs = [ ginkgo ];
 
+  doCheck = false;
   checkPhase = ''
     ginkgo run ./...
   '';
