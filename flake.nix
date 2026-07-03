@@ -59,6 +59,7 @@
                   };
                   virtualisation.memorySize = 2048;
                 };
+
               testScript = ''
                 machine.start()
                 machine.wait_for_unit("k3s.service", timeout=120)
