@@ -102,7 +102,7 @@ func parseJSON(data []byte) (*unstructured.Unstructured, error) {
 
 func splitYAML(data []byte) ([]*unstructured.Unstructured, error) {
 	var objs []*unstructured.Unstructured
-	for _, doc := range bytes.Split(data, []byte("\n---")) {
+	for doc := range bytes.SplitSeq(data, []byte("\n---")) {
 		doc = bytes.TrimSpace(doc)
 		if len(doc) == 0 {
 			continue
