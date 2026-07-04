@@ -65,6 +65,10 @@ schema = 3
     version = 'v1.6.0'
     hash = 'sha256-VWl9sqUzdOuhW0KzQlv0gwwUQClYkmZwSydHG2sALYw='
 
+  [mod.'github.com/inconshreveable/mousetrap']
+    version = 'v1.1.0'
+    hash = 'sha256-XWlYH0c8IcxAwQTnIi6WYqq44nOKUylSWxWO/vi+8pE='
+
   [mod.'github.com/josharian/intern']
     version = 'v1.0.0'
     hash = 'sha256-LJR0QE2vOQ2/2shBbO5Yl8cVPq+NFrE3ers0vu9FRP0='
@@ -90,8 +94,8 @@ schema = 3
     hash = 'sha256-79URDDFenmGc9JZu+5AXHToMrtTREHb3BC84b/gym9Q='
 
   [mod.'github.com/onsi/ginkgo/v2']
-    version = 'v2.28.1'
-    hash = 'sha256-ndaovLQb6s4cztI8MXXJajJDY1kMsuz5zEbVjlfKgAE='
+    version = 'v2.29.0'
+    hash = 'sha256-MLTachXRpWLD9614nLSR8xHw3iC0dxphcJ3gm6F2Reg='
 
   [mod.'github.com/onsi/gomega']
     version = 'v1.42.1'
@@ -117,9 +121,17 @@ schema = 3
     version = 'v0.19.2'
     hash = 'sha256-PJW21pew9v+XA7Miow8JVPct+FPIHmQHphwO+g2kNWA='
 
+  [mod.'github.com/spf13/cobra']
+    version = 'v1.10.2'
+    hash = 'sha256-nbRCTFiDCC2jKK7AHi79n7urYCMP5yDZnWtNVJrDi+k='
+
   [mod.'github.com/spf13/pflag']
     version = 'v1.0.9'
     hash = 'sha256-YAjyYpq5BXCosVJtvYLWFG1t4gma2ylzc7ILLoj/hD8='
+
+  [mod.'github.com/unmango/go']
+    version = 'v0.16.6'
+    hash = 'sha256-qBjI1pYTsSms/0be5i+3Ufj0gFKPWXzJ2eVR7V0txAs='
 
   [mod.'github.com/x448/float16']
     version = 'v0.8.4'
