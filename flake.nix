@@ -25,6 +25,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.inputs.systems.follows = "systems";
     };
+
+    nix2container = {
+      url = "github:nlewo/nix2container";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -35,6 +40,7 @@
 
       perSystem =
         {
+          inputs',
           pkgs,
           lib,
           system,
@@ -43,9 +49,15 @@
         let
           version = "0.0.1";
 
+          inherit (inputs'.nix2container.packages) nix2container;
+
           inoculant = pkgs.callPackage ./nix {
             inherit version;
             inherit (inputs) globset;
+          };
+
+          container = pkgs.callPackage ./nix/container.nix {
+            inherit inoculant nix2container version;
           };
         in
         {
@@ -55,9 +67,11 @@
           };
 
           packages = {
-            inherit inoculant;
+            inherit container inoculant;
             default = inoculant;
           };
+
+          packages.registries-conf = pkgs.callPackage ./nix/registries-conf.nix { };
 
           checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             nixos = inoculant.test;
