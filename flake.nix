@@ -10,6 +10,11 @@
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
 
+    globset = {
+      url = "github:pdtpartners/globset";
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
+
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -29,14 +34,19 @@
       imports = with inputs; [ treefmt-nix.flakeModule ];
 
       perSystem =
-        { pkgs, system, ... }:
+        {
+          pkgs,
+          lib,
+          system,
+          ...
+        }:
         let
           version = "0.0.1";
-          kubebuilderAssets = pkgs.runCommand "kubebuilder-assets" { } ''
-            mkdir -p $out
-            ln -s ${pkgs.etcd}/bin/etcd              $out/etcd
-            ln -s ${pkgs.kubernetes}/bin/kube-apiserver $out/kube-apiserver
-          '';
+
+          inoculant = pkgs.callPackage ./nix {
+            inherit version;
+            inherit (inputs) globset;
+          };
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {
@@ -44,30 +54,13 @@
             overlays = with inputs; [ gomod2nix.overlays.default ];
           };
 
-          packages.default = pkgs.callPackage ./nix { inherit version; };
+          packages = {
+            inherit inoculant;
+            default = inoculant;
+          };
 
           checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            nixos-inoculant = pkgs.testers.nixosTest {
-              name = "inoculant-nixos-integration";
-              nodes.machine =
-                { pkgs, ... }:
-                {
-                  services.k3s = {
-                    enable = true;
-                    role = "server";
-                    token = "inoculant-test-token";
-                  };
-                  virtualisation.memorySize = 2048;
-                };
-
-              testScript = ''
-                machine.start()
-                machine.wait_for_unit("k3s.service", timeout=120)
-                # TODO: once NixOS module exists:
-                #   machine.succeed("inoculant --kubeconfig /etc/rancher/k3s/k3s.yaml apply /etc/inoculant/manifests")
-                #   machine.succeed("kubectl get configmap inoculant-marker")
-              '';
-            };
+            nixos = inoculant.test;
           };
 
           devShells.default = pkgs.mkShellNoCC {
@@ -84,7 +77,11 @@
             GO = "${pkgs.go}/bin/go";
             GOMOD2NIX = "${pkgs.gomod2nix}/bin/gomod2nix";
             GINKGO = "${pkgs.ginkgo}/bin/ginkgo";
-            KUBEBUILDER_ASSETS = pkgs.lib.optionalString pkgs.stdenv.isLinux "${kubebuilderAssets}";
+
+            # https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
+            TEST_ASSET_ETCD = "${pkgs.etcd}/bin/etcd";
+            TEST_ASSET_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
+            TEST_ASSET_KUBE_APISERVER = "${pkgs.kubernetes}/bin/kube-apiserver";
           };
 
           treefmt.programs = {
