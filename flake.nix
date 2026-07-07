@@ -29,16 +29,14 @@
       imports = with inputs; [ treefmt-nix.flakeModule ];
 
       perSystem =
-        { pkgs, system, ... }:
+        {
+          pkgs,
+          lib,
+          system,
+          ...
+        }:
         let
           version = "0.0.1";
-
-          kubebuilderAssets = pkgs.runCommand "kubebuilder-assets" { } ''
-            mkdir -p $out
-            ln -s ${pkgs.etcd}/bin/etcd $out/etcd
-            ln -s ${pkgs.kubernetes}/bin/kube-apiserver $out/kube-apiserver
-          '';
-
           inoculant = pkgs.callPackage ./nix { inherit version; };
         in
         {
@@ -70,7 +68,11 @@
             GO = "${pkgs.go}/bin/go";
             GOMOD2NIX = "${pkgs.gomod2nix}/bin/gomod2nix";
             GINKGO = "${pkgs.ginkgo}/bin/ginkgo";
-            KUBEBUILDER_ASSETS = pkgs.lib.optionalString pkgs.stdenv.isLinux "${kubebuilderAssets}";
+
+            # https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
+            TEST_ASSET_ETCD = "${pkgs.etcd}/bin/etcd";
+            TEST_ASSET_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
+            TEST_ASSET_KUBE_APISERVER = "${pkgs.kubernetes}/bin/kube-apiserver";
           };
 
           treefmt.programs = {
