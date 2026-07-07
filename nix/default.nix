@@ -1,23 +1,30 @@
 {
   buildGoApplication,
   callPackage,
+  globset,
   lib,
-  ginkgo,
   version,
 }:
+let
+  fs = lib.fileset;
+in
 buildGoApplication {
   pname = "inoculant";
   inherit version;
 
-  src = lib.cleanSource ../.;
+  src = fs.toSource {
+    root = ../.;
+    fileset = globset.lib.globs ../. [
+      "go.mod"
+      "go.sum"
+      "**/*.go"
+    ];
+  };
+
   modules = ./gomod2nix.toml;
 
-  passthru.test = callPackage ./test.nix { };
-
-  nativeCheckInputs = [ ginkgo ];
-
+  # Tests use envTest
   doCheck = false;
-  checkPhase = ''
-    ginkgo run ./...
-  '';
+
+  passthru.test = callPackage ./test.nix { };
 }

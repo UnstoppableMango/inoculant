@@ -10,6 +10,11 @@
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
 
+    globset = {
+      url = "github:pdtpartners/globset";
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
+
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -37,7 +42,11 @@
         }:
         let
           version = "0.0.1";
-          inoculant = pkgs.callPackage ./nix { inherit version; };
+
+          inoculant = pkgs.callPackage ./nix {
+            inherit version;
+            inherit (inputs) globset;
+          };
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {
