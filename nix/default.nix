@@ -1,5 +1,6 @@
 {
   buildGoApplication,
+  callPackage,
   lib,
   ginkgo,
   version,
@@ -10,6 +11,8 @@ buildGoApplication {
 
   src = lib.cleanSource ../.;
   modules = ./gomod2nix.toml;
+
+  passthru.test = callPackage ./test.nix { };
 
   nativeCheckInputs = [ ginkgo ];
 
