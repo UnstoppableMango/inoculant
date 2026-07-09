@@ -94,7 +94,7 @@
             # https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
             TEST_ASSET_ETCD = "${pkgs.etcd}/bin/etcd";
             TEST_ASSET_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
-            TEST_ASSET_KUBE_APISERVER = "${pkgs.kubernetes}/bin/kube-apiserver";
+            TEST_ASSET_KUBE_APISERVER = lib.optionalString pkgs.stdenv.isLinux "${pkgs.kubernetes}/bin/kube-apiserver";
           };
 
           treefmt.programs = {
