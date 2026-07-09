@@ -84,6 +84,7 @@
               ginkgo
               gnumake
               nixfmt
+              skopeo
             ];
 
             GO = "${pkgs.go}/bin/go";
