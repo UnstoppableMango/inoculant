@@ -27,4 +27,10 @@ buildGoApplication {
   doCheck = false;
 
   passthru.test = callPackage ./test.nix { };
+
+  meta = {
+    description = "A kubernetes bootstrapper";
+    license = lib.licenses.mit;
+    mainProgram = "inoculant";
+  };
 }
