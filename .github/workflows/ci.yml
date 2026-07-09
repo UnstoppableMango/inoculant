@@ -38,3 +38,48 @@ jobs:
           name: unstoppablemango
 
       - run: nix develop -c make test
+
+  container:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: unstoppablemango
+
+      - run: nix build .#container
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ghcr.io/unstoppablemango/inoculant
+
+      - name: Configure registries.conf
+        run: |
+          out=$(nix build .#registries-conf --no-link --print-out-paths)
+          sudo cp "$out" /etc/containers/registries.conf
+
+      - name: Push container
+        if: github.ref == 'refs/heads/main'
+        env:
+          GHCR_CREDENTIALS: ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}
+        run: |
+          auth_file="${RUNNER_TEMP}/containers-auth.json"
+          auth="$(printf '%s' "$GHCR_CREDENTIALS" | base64 --wrap=0)"
+          cat >"$auth_file" <<EOF
+          {"auths":{"ghcr.io":{"auth":"$auth"}}}
+          EOF
+          while IFS= read -r tag; do
+            nix run .#container.copyTo -- "docker://$tag" \
+              --dest-authfile "$auth_file"
+          done <<< "${{ steps.meta.outputs.tags }}"
