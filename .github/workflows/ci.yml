@@ -76,6 +76,7 @@ jobs:
 
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
+          registry: ghcr.io
           username: unstoppablemango
           password: ${{ secrets.GITHUB_TOKEN }}
 
