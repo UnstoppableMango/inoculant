@@ -25,6 +25,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.inputs.systems.follows = "systems";
     };
+
+    nix2container = {
+      url = "github:nlewo/nix2container";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -35,6 +40,7 @@
 
       perSystem =
         {
+          inputs',
           pkgs,
           lib,
           system,
@@ -43,9 +49,15 @@
         let
           version = "0.0.1";
 
+          inherit (inputs'.nix2container.packages) nix2container;
+
           inoculant = pkgs.callPackage ./nix {
             inherit version;
             inherit (inputs) globset;
+          };
+
+          container = pkgs.callPackage ./nix/container.nix {
+            inherit inoculant nix2container version;
           };
         in
         {
@@ -55,7 +67,7 @@
           };
 
           packages = {
-            inherit inoculant;
+            inherit container inoculant;
             default = inoculant;
           };
 
@@ -72,6 +84,7 @@
               ginkgo
               gnumake
               nixfmt
+              skopeo
             ];
 
             GO = "${pkgs.go}/bin/go";
@@ -81,7 +94,7 @@
             # https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
             TEST_ASSET_ETCD = "${pkgs.etcd}/bin/etcd";
             TEST_ASSET_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
-            TEST_ASSET_KUBE_APISERVER = "${pkgs.kubernetes}/bin/kube-apiserver";
+            TEST_ASSET_KUBE_APISERVER = lib.optionalString pkgs.stdenv.isLinux "${pkgs.kubernetes}/bin/kube-apiserver";
           };
 
           treefmt.programs = {

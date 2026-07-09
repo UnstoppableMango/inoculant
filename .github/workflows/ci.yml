@@ -19,6 +19,7 @@ jobs:
       - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
         with:
           name: unstoppablemango
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - run: nix flake check
       - run: nix build .#
@@ -36,5 +37,56 @@ jobs:
       - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
         with:
           name: unstoppablemango
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - run: nix develop -c make test
+
+  container:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: unstoppablemango
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - run: nix build .#container
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ghcr.io/unstoppablemango/inoculant
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      - run: |
+          cat > "$RUNNER_TEMP/registries.conf" <<'EOF'
+          unqualified-search-registries = []
+          EOF
+          echo "CONTAINERS_REGISTRIES_CONF=$RUNNER_TEMP/registries.conf" >> "$GITHUB_ENV"
+          echo "CONTAINERS_REGISTRIES_CONF_OVERRIDE=" >> "$GITHUB_ENV"
+
+      - run: |
+          nix develop -c skopeo login ghcr.io \
+            --username unstoppablemango \
+            --password-stdin <<< "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Push container
+        run: |
+          while IFS= read -r tag; do
+            nix run .#container.copyTo -- "docker://$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
