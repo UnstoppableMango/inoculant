@@ -71,8 +71,6 @@
             default = inoculant;
           };
 
-          packages.registries-conf = pkgs.callPackage ./nix/registries-conf.nix { };
-
           checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             nixos = inoculant.test;
           };
