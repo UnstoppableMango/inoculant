@@ -67,11 +67,6 @@ jobs:
         with:
           images: ghcr.io/unstoppablemango/inoculant
 
-      - name: Configure registries.conf
-        run: |
-          out=$(nix build .#registries-conf --no-link --print-out-paths)
-          sudo cp "$out" /etc/containers/registries.conf
-
       - name: Push container
         if: github.ref == 'refs/heads/main'
         env:
