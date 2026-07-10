@@ -30,6 +30,9 @@ bin:
 bin/inoculant.tar: ${GO_SRC} ${NIX_SRC} | bin
 	nix run .#container.copyTo -- "oci-archive:${CURDIR}/$@:latest"
 
+bin/manifest.json: ${GO_SRC} ${NIX_SRC} | bin
+	nix build .#container --out-link $@
+
 go.sum: go.mod ${GO_SRC}
 	$(GO) mod tidy
 

@@ -5,14 +5,11 @@
   lib,
   version,
 }:
-let
-  fs = lib.fileset;
-in
 buildGoApplication {
   pname = "inoculant";
   inherit version;
 
-  src = fs.toSource {
+  src = lib.fileset.toSource {
     root = ../.;
     fileset = globset.lib.globs ../. [
       "go.mod"
