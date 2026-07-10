@@ -1,33 +1,18 @@
 {
-  buildGoApplication,
-  callPackage,
   globset,
-  lib,
+  pkgs,
+  nix2container,
   version,
 }:
-buildGoApplication {
-  pname = "inoculant";
-  inherit version;
-
-  src = lib.fileset.toSource {
-    root = ../.;
-    fileset = globset.lib.globs ../. [
-      "go.mod"
-      "go.sum"
-      "**/*.go"
-    ];
+let
+  inoculant = pkgs.callPackage ./inoculant.nix {
+    inherit globset version;
   };
 
-  modules = ./gomod2nix.toml;
-
-  # Tests use envTest
-  doCheck = false;
-
-  passthru.test = callPackage ./test.nix { };
-
-  meta = {
-    description = "A kubernetes bootstrapper";
-    license = lib.licenses.mit;
-    mainProgram = "inoculant";
+  container = pkgs.callPackage ./container.nix {
+    inherit inoculant nix2container version;
   };
+in
+{
+  inherit inoculant container;
 }

@@ -38,7 +38,9 @@
       systems = import inputs.systems;
       imports = with inputs; [ treefmt-nix.flakeModule ];
 
-      flake.nixosModules.default = ./nix/module.nix;
+      flake.nixosModules.default = import ./nix/module.nix {
+        # TODO
+      };
 
       perSystem =
         {
@@ -53,14 +55,14 @@
 
           inherit (inputs'.nix2container.packages) nix2container;
 
-          inoculant = pkgs.callPackage ./nix {
-            inherit version;
-            inherit (inputs) globset;
-          };
-
-          container = pkgs.callPackage ./nix/container.nix {
-            inherit inoculant nix2container version;
-          };
+          inherit
+            (pkgs.callPackage ./nix {
+              inherit (inputs) globset;
+              inherit nix2container version;
+            })
+            inoculant
+            container
+            ;
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {

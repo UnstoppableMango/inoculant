@@ -1,4 +1,4 @@
-{ skopeo-nix2container }:
+{ containerFor, skopeoFor }:
 {
   pkgs,
   lib,
@@ -12,17 +12,21 @@ in
     enable = lib.mkEnableOption "A kubernetes bootstrapper";
     pkg = lib.mkPackageOption pkgs "inoculant" { };
 
+    container = lib.mkOption {
+      type = lib.types.package;
+      default = containerFor pkgs.system;
+    };
+
     skopeo = lib.mkOption {
       type = lib.types.package;
-      default = skopeo-nix2container;
+      default = skopeoFor pkgs.system;
     };
   };
 
   config = lib.mkIf cfg.enable {
     services.kubernetes.kubelet.seedDockerImages = [
       (pkgs.callPackage ./tarball.nix {
-        inherit (cfg) skopeo;
-        # TODO: container = [...]
+        inherit (cfg) container skopeo;
       })
     ];
   };
