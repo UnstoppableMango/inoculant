@@ -1,5 +1,5 @@
 {
-  description = "A Nix flake";
+  description = "A kubernetes bootstrapper";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
@@ -37,6 +37,8 @@
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
       imports = with inputs; [ treefmt-nix.flakeModule ];
+
+      flake.nixosModules.default = ./nix/module.nix;
 
       perSystem =
         {
@@ -85,6 +87,7 @@
               gnumake
               nixfmt
               skopeo
+              watchexec
             ];
 
             GO = "${pkgs.go}/bin/go";
