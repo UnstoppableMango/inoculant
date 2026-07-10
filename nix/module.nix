@@ -16,7 +16,7 @@ in
   options.services.kubernetes.inoculant = {
     enable = lib.mkEnableOption "A kubernetes bootstrapper";
     pkg = lib.mkPackageOption pkgs "inoculant" { };
-    skopeo = lib.mkPackageOption pkgs "nix2container-skopeo" { };
+    skopeo = lib.mkPackageOption pkgs "skopeo-nix2container" { };
   };
 
   config = lib.mkIf cfg.enable {
