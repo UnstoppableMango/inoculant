@@ -38,9 +38,7 @@
       systems = import inputs.systems;
       imports = with inputs; [ treefmt-nix.flakeModule ];
 
-      flake.nixosModules.default = import ./nix/module.nix {
-        # TODO
-      };
+      flake.nixosModules.default = import ./nix/module.nix { inherit inputs; };
 
       perSystem =
         {

@@ -1,25 +1,43 @@
-{ containerFor, skopeoFor }:
+{
+  inputs,
+  version,
+}:
 {
   pkgs,
   lib,
   config,
 }:
 let
+  inherit (inputs) globset;
+  inherit (inputs.nix2container.packages.${pkgs.system}) nix2container skopeo-nix2container;
+
   cfg = config.services.kubernetes.inoculant;
 in
 {
   options.services.kubernetes.inoculant = {
     enable = lib.mkEnableOption "A kubernetes bootstrapper";
-    pkg = lib.mkPackageOption pkgs "inoculant" { };
+
+    pkg = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.callPackage ./inoculant.nix {
+        inherit globset version;
+      };
+    };
 
     container = lib.mkOption {
       type = lib.types.package;
-      default = containerFor pkgs.system;
+      default = pkgs.callPackage ./tarball.nix {
+        inherit (cfg) skopeo;
+        container = pkgs.callPackage ./container.nix {
+          inherit (cfg) inoculant;
+          inherit nix2container version;
+        };
+      };
     };
 
     skopeo = lib.mkOption {
       type = lib.types.package;
-      default = skopeoFor pkgs.system;
+      default = skopeo-nix2container;
     };
   };
 
