@@ -1,10 +1,14 @@
-{ testers }:
+{ module, testers }:
 
 testers.nixosTest {
   name = "nixos-integration";
   nodes.machine =
     { ... }:
     {
+      imports = [ module ];
+
+      services.kubernetes.inoculant.enable = true;
+
       services.k3s = {
         enable = true;
         role = "server";
@@ -16,7 +20,8 @@ testers.nixosTest {
   testScript = ''
     machine.start()
     machine.wait_for_unit("k3s.service", timeout=120)
-    # TODO: once NixOS module exists:
+    machine.succeed("inoculant --help")
+    # TODO: once `inoculant apply` exists:
     #   machine.succeed("inoculant --kubeconfig /etc/rancher/k3s/k3s.yaml apply /etc/inoculant/manifests")
     #   machine.succeed("kubectl get configmap inoculant-marker")
   '';

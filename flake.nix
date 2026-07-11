@@ -36,14 +36,15 @@
     inputs@{ flake-parts, ... }:
     let
       version = "0.0.1";
+      module = import ./nix/module.nix {
+        inherit inputs version;
+      };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
       imports = with inputs; [ treefmt-nix.flakeModule ];
 
-      flake.nixosModules.default = import ./nix/module.nix {
-        inherit inputs version;
-      };
+      flake.nixosModules.default = module;
 
       perSystem =
         {
@@ -59,10 +60,11 @@
           inherit
             (pkgs.callPackage ./nix {
               inherit (inputs) globset;
-              inherit nix2container version;
+              inherit module nix2container version;
             })
             inoculant
             container
+            test
             ;
         in
         {
@@ -77,7 +79,7 @@
           };
 
           checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            nixos = inoculant.test;
+            nixos = test;
           };
 
           devShells.default = pkgs.mkShellNoCC {

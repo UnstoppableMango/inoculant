@@ -6,6 +6,7 @@
   pkgs,
   lib,
   config,
+  ...
 }:
 let
   inherit (inputs) globset;
@@ -28,8 +29,10 @@ in
       type = lib.types.package;
       default = pkgs.callPackage ./tarball.nix {
         inherit (cfg) skopeo;
+        inherit version;
+
         container = pkgs.callPackage ./container.nix {
-          inherit (cfg) inoculant;
+          inoculant = cfg.pkg;
           inherit nix2container version;
         };
       };
@@ -42,10 +45,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    services.kubernetes.kubelet.seedDockerImages = [
-      (pkgs.callPackage ./tarball.nix {
-        inherit (cfg) container skopeo;
-      })
-    ];
+    services.kubernetes.kubelet.seedDockerImages = [ cfg.container ];
   };
 }

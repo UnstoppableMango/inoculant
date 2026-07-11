@@ -1,6 +1,5 @@
 {
   buildGoApplication,
-  callPackage,
   globset,
   lib,
   version,
@@ -22,8 +21,6 @@ buildGoApplication {
 
   # Tests use envTest
   doCheck = false;
-
-  passthru.test = callPackage ./test.nix { };
 
   meta = {
     description = "A kubernetes bootstrapper";

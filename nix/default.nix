@@ -1,5 +1,6 @@
 {
   globset,
+  module,
   pkgs,
   nix2container,
   version,
@@ -12,7 +13,11 @@ let
   container = pkgs.callPackage ./container.nix {
     inherit inoculant nix2container version;
   };
+
+  test = pkgs.callPackage ./test.nix {
+    inherit module;
+  };
 in
 {
-  inherit inoculant container;
+  inherit inoculant container test;
 }
