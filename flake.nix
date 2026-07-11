@@ -34,11 +34,16 @@
 
   outputs =
     inputs@{ flake-parts, ... }:
+    let
+      version = "0.0.1";
+    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
       imports = with inputs; [ treefmt-nix.flakeModule ];
 
-      flake.nixosModules.default = import ./nix/module.nix { inherit inputs; };
+      flake.nixosModules.default = import ./nix/module.nix {
+        inherit inputs version;
+      };
 
       perSystem =
         {
@@ -49,8 +54,6 @@
           ...
         }:
         let
-          version = "0.0.1";
-
           inherit (inputs'.nix2container.packages) nix2container;
 
           inherit
