@@ -10,7 +10,10 @@
 }:
 let
   inherit (inputs) globset;
-  inherit (inputs.nix2container.packages.${pkgs.system}) nix2container skopeo-nix2container;
+  inherit (inputs.nix2container.packages.${pkgs.stdenv.hostPlatform.system})
+    nix2container
+    skopeo-nix2container
+    ;
 
   cfg = config.services.kubernetes.inoculant;
 in

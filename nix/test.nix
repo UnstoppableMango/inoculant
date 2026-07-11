@@ -3,26 +3,44 @@
 testers.nixosTest {
   name = "nixos-integration";
   nodes.machine =
-    { ... }:
+    { pkgs, ... }:
     {
       imports = [ module ];
 
-      services.kubernetes.inoculant.enable = true;
-
-      services.k3s = {
-        enable = true;
-        role = "server";
-        token = "inoculant-test-token";
+      services.kubernetes = {
+        inoculant.enable = true;
+        roles = [
+          "master"
+          "node"
+        ];
+        masterAddress = "machine";
+        easyCerts = true;
       };
-      virtualisation.memorySize = 2048;
+
+      environment.systemPackages = [
+        pkgs.kubectl
+        pkgs.containerd
+      ];
+      environment.variables.KUBECONFIG = "/etc/kubernetes/cluster-admin.kubeconfig";
+
+      networking.firewall.enable = false;
+
+      virtualisation = {
+        memorySize = 4096;
+        diskSize = 4096;
+        cores = 2;
+      };
     };
 
   testScript = ''
     machine.start()
-    machine.wait_for_unit("k3s.service", timeout=120)
-    machine.succeed("inoculant --help")
+    machine.wait_for_unit("kubernetes.target")
+    machine.wait_until_succeeds(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get nodes | grep -w Ready"
+    )
+    machine.succeed("ctr --namespace k8s.io images list | grep inoculant")
     # TODO: once `inoculant apply` exists:
-    #   machine.succeed("inoculant --kubeconfig /etc/rancher/k3s/k3s.yaml apply /etc/inoculant/manifests")
+    #   machine.succeed("inoculant --kubeconfig /etc/kubernetes/cluster-admin.kubeconfig apply /etc/inoculant/manifests")
     #   machine.succeed("kubectl get configmap inoculant-marker")
   '';
 }
