@@ -28,7 +28,7 @@ in
       };
     };
 
-    container = lib.mkOption {
+    imageArchive = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./tarball.nix {
         inherit (cfg) skopeo;
@@ -48,6 +48,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    services.kubernetes.kubelet.seedDockerImages = [ cfg.container ];
+    services.kubernetes.kubelet.seedDockerImages = [ cfg.imageArchive ];
   };
 }

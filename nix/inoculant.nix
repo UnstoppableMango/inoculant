@@ -19,7 +19,7 @@ buildGoApplication {
 
   modules = ./gomod2nix.toml;
 
-  # Tests use envTest
+  # Tests use envtest
   doCheck = false;
 
   meta = {
