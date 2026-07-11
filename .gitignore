@@ -4,3 +4,5 @@
 bin/
 .claude/
 *.test
+.vscode/*
+!.vscode/extensions.json

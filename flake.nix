@@ -1,5 +1,5 @@
 {
-  description = "A Nix flake";
+  description = "A kubernetes bootstrapper";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
@@ -34,9 +34,17 @@
 
   outputs =
     inputs@{ flake-parts, ... }:
+    let
+      version = "0.0.1";
+      module = import ./nix/module.nix {
+        inherit inputs version;
+      };
+    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
       imports = with inputs; [ treefmt-nix.flakeModule ];
+
+      flake.nixosModules.default = module;
 
       perSystem =
         {
@@ -47,18 +55,17 @@
           ...
         }:
         let
-          version = "0.0.1";
-
           inherit (inputs'.nix2container.packages) nix2container;
 
-          inoculant = pkgs.callPackage ./nix {
-            inherit version;
-            inherit (inputs) globset;
-          };
-
-          container = pkgs.callPackage ./nix/container.nix {
-            inherit inoculant nix2container version;
-          };
+          inherit
+            (pkgs.callPackage ./nix {
+              inherit (inputs) globset;
+              inherit module nix2container version;
+            })
+            inoculant
+            container
+            test
+            ;
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {
@@ -72,7 +79,7 @@
           };
 
           checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            nixos = inoculant.test;
+            nixos = test;
           };
 
           devShells.default = pkgs.mkShellNoCC {
@@ -85,6 +92,7 @@
               gnumake
               nixfmt
               skopeo
+              watchexec
             ];
 
             GO = "${pkgs.go}/bin/go";
