@@ -19,8 +19,6 @@ let
   cfg = config.services.kubernetes.inoculant;
 
   image = "inoculant:${version}";
-
-  kubeconfig = "/etc/${config.services.kubernetes.pki.etcClusterAdminKubeconfig}";
 in
 {
   options.services.kubernetes.inoculant = {
@@ -52,9 +50,14 @@ in
     };
 
     manifestsDirectory = lib.mkOption {
-      type = lib.types.path;
+      type = lib.types.externalPath;
       default = "/etc/inoculant/manifests";
       description = "Host directory containing static manifests for inoculant to apply.";
+    };
+
+    kubeconfig = lib.mkOption {
+      type = lib.types.externalPath;
+      default = "/etc/${config.services.kubernetes.pki.etcClusterAdminKubeconfig}";
     };
   };
 
@@ -80,14 +83,14 @@ in
             image = image;
             args = [
               "--kubeconfig"
-              kubeconfig
+              cfg.kubeconfig
               "apply"
               "/manifests"
             ];
             volumeMounts = [
               {
                 name = "kubeconfig";
-                mountPath = kubeconfig;
+                mountPath = cfg.kubeconfig;
                 readOnly = true;
               }
               {
@@ -101,7 +104,7 @@ in
         volumes = [
           {
             name = "kubeconfig";
-            hostPath.path = kubeconfig;
+            hostPath.path = cfg.kubeconfig;
           }
           {
             name = "manifests";
