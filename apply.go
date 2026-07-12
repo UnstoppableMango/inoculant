@@ -34,6 +34,11 @@ func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
 		return err
 	}
 
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+
 	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

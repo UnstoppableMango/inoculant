@@ -38,7 +38,9 @@ testers.nixosTest {
         "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get nodes | grep -w Ready"
     )
     machine.succeed("ctr --namespace k8s.io images list | grep inoculant")
-    machine.succeed("inoculant --kubeconfig /etc/kubernetes/cluster-admin.kubeconfig apply /etc/inoculant/manifests")
-    machine.succeed("kubectl get configmap inoculant-marker")
+    machine.wait_until_succeeds(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-marker",
+        timeout=60,
+    )
   '';
 }

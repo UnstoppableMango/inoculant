@@ -18,7 +18,20 @@ let
 
   cfg = config.services.kubernetes.inoculant;
 
-  image = "inoculant:${version}";
+  imageBaseName = "docker.io/library/inoculant";
+  image = "${imageBaseName}:${version}";
+
+  # A real directory of copies, not symlinks: the pod bind-mounts this
+  # directory alone (not the wider Nix store), so entries must not point
+  # outside it.
+  manifestsDrv = pkgs.runCommand "inoculant-manifests" { } ''
+    mkdir -p "$out"
+    ${lib.concatStrings (
+      lib.mapAttrsToList (name: text: ''
+        cp ${pkgs.writeText name text} "$out/${name}"
+      '') cfg.manifests
+    )}
+  '';
 in
 {
   options.services.kubernetes.inoculant = {
@@ -55,6 +68,20 @@ in
       description = "Host directory containing static manifests for inoculant to apply.";
     };
 
+    manifests = lib.mkOption {
+      type = lib.types.attrsOf lib.types.lines;
+      default = {
+        "marker.yaml" = ''
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: inoculant-marker
+          data: {}
+        '';
+      };
+      description = "Static manifests seeded into manifestsDirectory for inoculant to apply.";
+    };
+
     kubeconfig = lib.mkOption {
       type = lib.types.externalPath;
       default = "/etc/${config.services.kubernetes.pki.etcClusterAdminKubeconfig}";
@@ -62,10 +89,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    services.kubernetes.kubelet.seedDockerImages = [ cfg.imageArchive ];
+    systemd.services.kubelet.preStart = lib.mkAfter ''
+      ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
+    '';
 
     systemd.tmpfiles.rules = [
-      "d ${cfg.manifestsDirectory} 0755 root root -"
+      "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
     ];
 
     services.kubernetes.kubelet.manifests.inoculant = {
@@ -77,6 +106,8 @@ in
       };
       spec = {
         restartPolicy = "OnFailure";
+        hostNetwork = true;
+        dnsPolicy = "Default";
         containers = [
           {
             name = "inoculant";
@@ -94,6 +125,11 @@ in
                 readOnly = true;
               }
               {
+                name = "secrets";
+                mountPath = config.services.kubernetes.secretsPath;
+                readOnly = true;
+              }
+              {
                 name = "manifests";
                 mountPath = "/manifests";
                 readOnly = true;
@@ -105,6 +141,10 @@ in
           {
             name = "kubeconfig";
             hostPath.path = cfg.kubeconfig;
+          }
+          {
+            name = "secrets";
+            hostPath.path = config.services.kubernetes.secretsPath;
           }
           {
             name = "manifests";

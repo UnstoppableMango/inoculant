@@ -84,6 +84,7 @@
 
           devShells.default = pkgs.mkShellNoCC {
             packages = with pkgs; [
+              containerd
               direnv
               go
               gomod2nix
