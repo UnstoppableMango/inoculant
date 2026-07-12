@@ -1,35 +1,22 @@
 package inoculant
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/yaml"
 )
 
 func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
-	httpClient, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		return err
-	}
-
-	mapper, err := apiutil.NewDynamicRESTMapper(cfg, httpClient)
-	if err != nil {
-		return err
-	}
-
-	dynClient, err := dynamic.NewForConfig(cfg)
+	mapper, dynClient, err := newClients(cfg)
 	if err != nil {
 		return err
 	}
@@ -52,78 +39,56 @@ func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
 			return nil
 		}
 
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		var objs []*unstructured.Unstructured
-		if ext == ".json" {
-			obj, err := parseJSON(data)
-			if err != nil {
-				return err
-			}
-			objs = []*unstructured.Unstructured{obj}
-		} else {
-			objs, err = splitYAML(data)
-			if err != nil {
-				return err
-			}
-		}
-
-		for _, obj := range objs {
-			gvk := obj.GroupVersionKind()
-			mapping, err := mapper.RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
-			if err != nil {
-				return err
-			}
-
-			var ri dynamic.ResourceInterface
-			if mapping.Scope.Name() == "namespace" {
-				ns := obj.GetNamespace()
-				if ns == "" {
-					ns = "default"
-				}
-				ri = dynClient.Resource(mapping.Resource).Namespace(ns)
-			} else {
-				ri = dynClient.Resource(mapping.Resource)
-			}
-
-			if _, err := ri.Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: "inoculant"}); err != nil {
-				return err
-			}
-		}
-		return nil
+		return applyFile(ctx, path, ext, mapper, dynClient)
 	})
 }
 
-func parseJSON(data []byte) (*unstructured.Unstructured, error) {
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, err
+func applyFile(ctx context.Context, path, ext string, mapper meta.RESTMapper, dynClient dynamic.Interface) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
 	}
-	return &unstructured.Unstructured{Object: m}, nil
+
+	var objs []*unstructured.Unstructured
+	if ext == ".json" {
+		obj, err := parseJSON(data)
+		if err != nil {
+			return err
+		}
+		objs = []*unstructured.Unstructured{obj}
+	} else {
+		objs, err = splitYAML(data)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, obj := range objs {
+		if err := applyObject(ctx, obj, mapper, dynClient); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func splitYAML(data []byte) ([]*unstructured.Unstructured, error) {
-	var objs []*unstructured.Unstructured
-	for doc := range bytes.SplitSeq(data, []byte("\n---")) {
-		doc = bytes.TrimSpace(doc)
-		if len(doc) == 0 {
-			continue
-		}
-		jsonBytes, err := yaml.YAMLToJSON(doc)
-		if err != nil {
-			return nil, err
-		}
-		if string(jsonBytes) == "null" {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal(jsonBytes, &m); err != nil {
-			return nil, err
-		}
-		objs = append(objs, &unstructured.Unstructured{Object: m})
+func applyObject(ctx context.Context, obj *unstructured.Unstructured, mapper meta.RESTMapper, dynClient dynamic.Interface) error {
+	gvk := obj.GroupVersionKind()
+	mapping, err := mapper.RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
+	if err != nil {
+		return err
 	}
-	return objs, nil
+
+	var ri dynamic.ResourceInterface
+	if mapping.Scope.Name() == "namespace" {
+		ns := obj.GetNamespace()
+		if ns == "" {
+			ns = "default"
+		}
+		ri = dynClient.Resource(mapping.Resource).Namespace(ns)
+	} else {
+		ri = dynClient.Resource(mapping.Resource)
+	}
+
+	_, err = ri.Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: "inoculant"})
+	return err
 }
