@@ -166,4 +166,26 @@ data:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got.Data["run"]).To(Equal("1"))
 	})
+
+	It("applies resources when the given directory is a symlink", func() {
+		real := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(real, "cm.yaml"), []byte(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inoculant-symlink
+  namespace: default
+data:
+  via: symlink
+`), 0644)).To(Succeed())
+
+		link := filepath.Join(GinkgoT().TempDir(), "link")
+		Expect(os.Symlink(real, link)).To(Succeed())
+
+		Expect(inoculant.Apply(ctx, link, cfg)).To(Succeed())
+
+		got, err := clientset.CoreV1().ConfigMaps("default").Get(ctx, "inoculant-symlink", metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Data["via"]).To(Equal("symlink"))
+	})
 })

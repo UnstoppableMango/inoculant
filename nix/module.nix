@@ -28,7 +28,7 @@ let
     mkdir -p "$out"
     ${lib.concatStrings (
       lib.mapAttrsToList (name: text: ''
-        cp ${pkgs.writeText name text} "$out/${name}"
+        cp ${pkgs.writeText name text} "$out/"${lib.escapeShellArg name}
       '') cfg.manifests
     )}
   '';
@@ -89,6 +89,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # TODO: this reimports the archive on every kubelet restart (e.g. cert
+    # rotation), not just the first boot. Guard with an existence check.
+    # (nixpkgs' own seedDockerImages preStart has the same flaw.)
     systemd.services.kubelet.preStart = lib.mkAfter ''
       ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
     '';
