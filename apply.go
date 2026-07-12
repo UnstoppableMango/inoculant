@@ -79,7 +79,7 @@ func applyObject(ctx context.Context, obj *unstructured.Unstructured, mapper met
 	}
 
 	var ri dynamic.ResourceInterface
-	if mapping.Scope.Name() == "namespace" {
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 		ns := obj.GetNamespace()
 		if ns == "" {
 			ns = "default"
