@@ -21,7 +21,6 @@ testers.nixosTest {
         pkgs.kubectl
         pkgs.containerd
       ];
-      environment.variables.KUBECONFIG = "/etc/kubernetes/cluster-admin.kubeconfig";
 
       networking.firewall.enable = false;
 
@@ -39,8 +38,7 @@ testers.nixosTest {
         "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get nodes | grep -w Ready"
     )
     machine.succeed("ctr --namespace k8s.io images list | grep inoculant")
-    # TODO: once `inoculant apply` exists:
-    #   machine.succeed("inoculant --kubeconfig /etc/kubernetes/cluster-admin.kubeconfig apply /etc/inoculant/manifests")
-    #   machine.succeed("kubectl get configmap inoculant-marker")
+    machine.succeed("inoculant --kubeconfig /etc/kubernetes/cluster-admin.kubeconfig apply /etc/inoculant/manifests")
+    machine.succeed("kubectl get configmap inoculant-marker")
   '';
 }
