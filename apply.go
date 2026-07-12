@@ -89,6 +89,6 @@ func applyObject(ctx context.Context, obj *unstructured.Unstructured, mapper met
 		ri = dynClient.Resource(mapping.Resource)
 	}
 
-	_, err = ri.Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: "inoculant"})
+	_, err = ri.Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: "inoculant", Force: true})
 	return err
 }
