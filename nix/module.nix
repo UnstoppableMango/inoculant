@@ -25,7 +25,10 @@ let
   # directory alone (not the wider Nix store), so entries must not point
   # outside it.
   manifestsDrv = pkgs.runCommand "inoculant-manifests" { } (
-    lib.concatStrings (
+    ''
+      mkdir -p "$out"
+    ''
+    + lib.concatStrings (
       lib.mapAttrsToList (name: manifest: ''
         install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/"${lib.escapeShellArg "${name}.json"}
       '') cfg.manifests
@@ -90,116 +93,129 @@ in
       description = "Static manifests seeded into manifestsDirectory for inoculant to apply.";
     };
 
+    # In-container path only: this is where the kubeconfig appears inside
+    # the pod (mountPath + --kubeconfig arg), not a host file the module
+    # must create. The host-side source is always the generated kubeconfig
+    # store path, so overriding this is safe regardless of where it lives
+    # on the host.
     kubeconfig = lib.mkOption {
       type = lib.types.externalPath;
       default = "/etc/inoculant/kubeconfig";
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    # TODO: this reimports the archive on every kubelet restart (e.g. cert
-    # rotation), not just the first boot. Guard with an existence check.
-    # (nixpkgs' own seedDockerImages preStart has the same flaw.)
-    systemd.services.kubelet.preStart = lib.mkAfter ''
-      ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
-    '';
+  config = lib.mkIf cfg.enable (
+    let
+      # A Nix store path, not an /etc file: mirrors how nixpkgs' own
+      # kubelet/kube-proxy/scheduler/controller-manager consume their
+      # kubeconfigs (mkKubeConfig result passed directly to the consumer),
+      # rather than round-tripping through /etc like the shared
+      # cluster-admin kubeconfig does. This keeps cfg.kubeconfig purely an
+      # in-container path: overriding it can't desync it from the file
+      # actually mounted in.
+      kubeconfigFile = config.services.kubernetes.lib.mkKubeConfig "inoculant" {
+        server = config.services.kubernetes.apiserverAddress;
+        certFile = config.services.kubernetes.pki.certs.inoculant.cert;
+        keyFile = config.services.kubernetes.pki.certs.inoculant.key;
+      };
+    in
+    {
+      # TODO: this reimports the archive on every kubelet restart (e.g. cert
+      # rotation), not just the first boot. Guard with an existence check.
+      # (nixpkgs' own seedDockerImages preStart has the same flaw.)
+      systemd.services.kubelet.preStart = lib.mkAfter ''
+        ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
+      '';
 
-    systemd.tmpfiles.rules = [
-      "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
-    ];
+      systemd.tmpfiles.rules = [
+        "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
+      ];
 
-    # Own x509 identity instead of reusing the shared cluster-admin
-    # kubeconfig, so the pod only needs its own cert/key mounted rather than
-    # the whole secretsPath directory (every other component's certs + the
-    # service-account signing key). O=system:masters keeps it
-    # cluster-admin-equivalent, same as the cluster-admin cert itself.
-    services.kubernetes.pki.certs.inoculant = config.services.kubernetes.lib.mkCert {
-      name = "inoculant";
-      CN = "inoculant";
-      fields.O = "system:masters";
-    };
-
-    environment.etc."inoculant/kubeconfig".source =
-      config.services.kubernetes.lib.mkKubeConfig "inoculant"
-        {
-          server = config.services.kubernetes.apiserverAddress;
-          certFile = config.services.kubernetes.pki.certs.inoculant.cert;
-          keyFile = config.services.kubernetes.pki.certs.inoculant.key;
-        };
-
-    services.kubernetes.kubelet.manifests.inoculant = {
-      apiVersion = "v1";
-      kind = "Pod";
-      metadata = {
+      # Own x509 identity instead of reusing the shared cluster-admin
+      # kubeconfig, so the pod only needs its own cert/key mounted rather than
+      # the whole secretsPath directory (every other component's certs + the
+      # service-account signing key). O=system:masters keeps it
+      # cluster-admin-equivalent, same as the cluster-admin cert itself.
+      services.kubernetes.pki.certs.inoculant = config.services.kubernetes.lib.mkCert {
         name = "inoculant";
-        namespace = "kube-system";
+        CN = "inoculant";
+        fields.O = "system:masters";
       };
-      spec = {
-        restartPolicy = "OnFailure";
-        hostNetwork = true;
-        dnsPolicy = "Default";
-        containers = [
-          {
-            name = "inoculant";
-            image = image;
-            args = [
-              "--kubeconfig"
-              cfg.kubeconfig
-              "apply"
-              "/manifests"
-            ];
-            volumeMounts = [
-              {
-                name = "kubeconfig";
-                mountPath = cfg.kubeconfig;
-                readOnly = true;
-              }
-              {
-                name = "ca-cert";
-                mountPath = config.services.kubernetes.caFile;
-                readOnly = true;
-              }
-              {
-                name = "client-cert";
-                mountPath = config.services.kubernetes.pki.certs.inoculant.cert;
-                readOnly = true;
-              }
-              {
-                name = "client-key";
-                mountPath = config.services.kubernetes.pki.certs.inoculant.key;
-                readOnly = true;
-              }
-              {
-                name = "manifests";
-                mountPath = "/manifests";
-                readOnly = true;
-              }
-            ];
-          }
-        ];
-        volumes = [
-          {
-            name = "kubeconfig";
-            hostPath.path = cfg.kubeconfig;
-          }
-          {
-            name = "ca-cert";
-            hostPath.path = config.services.kubernetes.caFile;
-          }
-          {
-            name = "client-cert";
-            hostPath.path = config.services.kubernetes.pki.certs.inoculant.cert;
-          }
-          {
-            name = "client-key";
-            hostPath.path = config.services.kubernetes.pki.certs.inoculant.key;
-          }
-          {
-            name = "manifests";
-            hostPath.path = cfg.manifestsDirectory;
-          }
-        ];
+
+      services.kubernetes.kubelet.manifests.inoculant = {
+        apiVersion = "v1";
+        kind = "Pod";
+        metadata = {
+          name = "inoculant";
+          namespace = "kube-system";
+        };
+        spec = {
+          restartPolicy = "OnFailure";
+          hostNetwork = true;
+          dnsPolicy = "Default";
+          containers = [
+            {
+              name = "inoculant";
+              image = image;
+              args = [
+                "--kubeconfig"
+                cfg.kubeconfig
+                "apply"
+                "/manifests"
+              ];
+              volumeMounts = [
+                {
+                  name = "kubeconfig";
+                  mountPath = cfg.kubeconfig;
+                  readOnly = true;
+                }
+                {
+                  name = "ca-cert";
+                  mountPath = config.services.kubernetes.caFile;
+                  readOnly = true;
+                }
+                {
+                  name = "client-cert";
+                  mountPath = config.services.kubernetes.pki.certs.inoculant.cert;
+                  readOnly = true;
+                }
+                {
+                  name = "client-key";
+                  mountPath = config.services.kubernetes.pki.certs.inoculant.key;
+                  readOnly = true;
+                }
+                {
+                  name = "manifests";
+                  mountPath = "/manifests";
+                  readOnly = true;
+                }
+              ];
+            }
+          ];
+          volumes = [
+            {
+              name = "kubeconfig";
+              hostPath.path = kubeconfigFile;
+            }
+            {
+              name = "ca-cert";
+              hostPath.path = config.services.kubernetes.caFile;
+            }
+            {
+              name = "client-cert";
+              hostPath.path = config.services.kubernetes.pki.certs.inoculant.cert;
+            }
+            {
+              name = "client-key";
+              hostPath.path = config.services.kubernetes.pki.certs.inoculant.key;
+            }
+            {
+              name = "manifests";
+              hostPath.path = cfg.manifestsDirectory;
+            }
+          ];
+        };
       };
-    };
-  };
+    }
+  );
 }
