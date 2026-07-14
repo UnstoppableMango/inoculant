@@ -92,7 +92,7 @@ in
 
     kubeconfig = lib.mkOption {
       type = lib.types.externalPath;
-      default = "/etc/${config.services.kubernetes.pki.etcClusterAdminKubeconfig}";
+      default = "/etc/inoculant/kubeconfig";
     };
   };
 
@@ -107,6 +107,25 @@ in
     systemd.tmpfiles.rules = [
       "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
     ];
+
+    # Own x509 identity instead of reusing the shared cluster-admin
+    # kubeconfig, so the pod only needs its own cert/key mounted rather than
+    # the whole secretsPath directory (every other component's certs + the
+    # service-account signing key). O=system:masters keeps it
+    # cluster-admin-equivalent, same as the cluster-admin cert itself.
+    services.kubernetes.pki.certs.inoculant = config.services.kubernetes.lib.mkCert {
+      name = "inoculant";
+      CN = "inoculant";
+      fields.O = "system:masters";
+    };
+
+    environment.etc."inoculant/kubeconfig".source =
+      config.services.kubernetes.lib.mkKubeConfig "inoculant"
+        {
+          server = config.services.kubernetes.apiserverAddress;
+          certFile = config.services.kubernetes.pki.certs.inoculant.cert;
+          keyFile = config.services.kubernetes.pki.certs.inoculant.key;
+        };
 
     services.kubernetes.kubelet.manifests.inoculant = {
       apiVersion = "v1";
@@ -136,8 +155,18 @@ in
                 readOnly = true;
               }
               {
-                name = "secrets";
-                mountPath = config.services.kubernetes.secretsPath;
+                name = "ca-cert";
+                mountPath = config.services.kubernetes.caFile;
+                readOnly = true;
+              }
+              {
+                name = "client-cert";
+                mountPath = config.services.kubernetes.pki.certs.inoculant.cert;
+                readOnly = true;
+              }
+              {
+                name = "client-key";
+                mountPath = config.services.kubernetes.pki.certs.inoculant.key;
                 readOnly = true;
               }
               {
@@ -154,8 +183,16 @@ in
             hostPath.path = cfg.kubeconfig;
           }
           {
-            name = "secrets";
-            hostPath.path = config.services.kubernetes.secretsPath;
+            name = "ca-cert";
+            hostPath.path = config.services.kubernetes.caFile;
+          }
+          {
+            name = "client-cert";
+            hostPath.path = config.services.kubernetes.pki.certs.inoculant.cert;
+          }
+          {
+            name = "client-key";
+            hostPath.path = config.services.kubernetes.pki.certs.inoculant.key;
           }
           {
             name = "manifests";
