@@ -188,4 +188,50 @@ data:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got.Data["via"]).To(Equal("symlink"))
 	})
+
+	It("fails on invalid YAML", func() {
+		dir := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte(`
+apiVersion: v1
+kind: ConfigMap
+metadata: [this is not, valid: yaml
+`), 0644)).To(Succeed())
+
+		Expect(inoculant.Apply(ctx, dir, cfg)).NotTo(Succeed())
+	})
+
+	It("fails on an unknown kind", func() {
+		dir := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(dir, "cm.yaml"), []byte(`
+apiVersion: v1
+kind: NotARealKind
+metadata:
+  name: inoculant-unknown-kind
+  namespace: default
+`), 0644)).To(Succeed())
+
+		Expect(inoculant.Apply(ctx, dir, cfg)).NotTo(Succeed())
+	})
+
+	It("succeeds on an empty directory", func() {
+		dir := GinkgoT().TempDir()
+
+		Expect(inoculant.Apply(ctx, dir, cfg)).To(Succeed())
+	})
+
+	It("applies a cluster-scoped resource without a namespace", func() {
+		dir := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(dir, "ns.yaml"), []byte(`
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inoculant-cluster-scoped
+`), 0644)).To(Succeed())
+
+		Expect(inoculant.Apply(ctx, dir, cfg)).To(Succeed())
+
+		got, err := clientset.CoreV1().Namespaces().Get(ctx, "inoculant-cluster-scoped", metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Name).To(Equal("inoculant-cluster-scoped"))
+	})
 })
