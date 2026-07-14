@@ -24,19 +24,22 @@ let
   # A real directory of copies, not symlinks: the pod bind-mounts this
   # directory alone (not the wider Nix store), so entries must not point
   # outside it.
-  manifestsDrv = pkgs.runCommand "inoculant-manifests" { } ''
-    mkdir -p "$out"
-    ${lib.concatStrings (
-      lib.mapAttrsToList (name: text: ''
-        cp ${pkgs.writeText name text} "$out/"${lib.escapeShellArg name}
+  manifestsDrv = pkgs.runCommand "inoculant-manifests" { } (
+    lib.concatStrings (
+      lib.mapAttrsToList (name: manifest: ''
+        install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/"${lib.escapeShellArg "${name}.json"}
       '') cfg.manifests
-    )}
-  '';
+    )
+  );
 in
 {
   options.services.kubernetes.inoculant = {
     enable = lib.mkEnableOption "A kubernetes bootstrapper";
 
+    # Built from this module's own `pkgs` arg, not the flake's already-built
+    # `inoculant` package: this module is exported as flake.nixosModules.default
+    # and must stay import-able by any NixOS config on any nixpkgs pin, so it
+    # can't reach into this flake's perSystem outputs.
     pkg = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./inoculant.nix {
@@ -44,6 +47,8 @@ in
       };
     };
 
+    # Same self-containment reasoning as `pkg` above: rebuilt from `cfg.pkg`
+    # rather than reusing the flake's `container`/tarball packages.
     imageArchive = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./tarball.nix {
@@ -68,16 +73,19 @@ in
       description = "Host directory containing static manifests for inoculant to apply.";
     };
 
+    # Same shape as services.kubernetes.kubelet.manifests: attrset of nix
+    # attrs, rendered to "<name>.json" via builtins.toJSON. Keys become
+    # filenames (via manifestsDrv below), so they must be plain names (no
+    # "/" or other path-breaking characters).
     manifests = lib.mkOption {
-      type = lib.types.attrsOf lib.types.lines;
+      type = lib.types.attrsOf lib.types.attrs;
       default = {
-        "marker.yaml" = ''
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: inoculant-marker
-          data: {}
-        '';
+        marker = {
+          apiVersion = "v1";
+          kind = "ConfigMap";
+          metadata.name = "inoculant-marker";
+          data = { };
+        };
       };
       description = "Static manifests seeded into manifestsDirectory for inoculant to apply.";
     };
