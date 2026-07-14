@@ -30,11 +30,11 @@ func splitYAML(data []byte) ([]*unstructured.Unstructured, error) {
 		if string(jsonBytes) == "null" {
 			continue
 		}
-		var m map[string]any
-		if err := json.Unmarshal(jsonBytes, &m); err != nil {
+		obj, err := parseJSON(jsonBytes)
+		if err != nil {
 			return nil, err
 		}
-		objs = append(objs, &unstructured.Unstructured{Object: m})
+		objs = append(objs, obj)
 	}
 	return objs, nil
 }
