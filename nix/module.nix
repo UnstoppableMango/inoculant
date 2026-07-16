@@ -28,7 +28,7 @@ let
     ''
     + lib.concatStrings (
       lib.mapAttrsToList (name: manifest: ''
-        install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/${lib.escapeShellArg "${name}.json"}"
+        install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/"${lib.escapeShellArg "${name}.json"}
       '') cfg.manifests
     )
   );
