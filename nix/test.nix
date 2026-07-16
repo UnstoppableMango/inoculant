@@ -9,6 +9,15 @@ testers.nixosTest {
 
       services.kubernetes = {
         inoculant.enable = true;
+        inoculant.manifests = {
+          marker = {
+            apiVersion = "v1";
+            kind = "ConfigMap";
+            metadata.name = "inoculant-marker";
+            data = { };
+          };
+        };
+
         roles = [
           "master"
           "node"
