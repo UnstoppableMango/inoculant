@@ -16,10 +16,8 @@ let
     skopeo-nix2container
     ;
 
-  cfg = config.services.kubernetes.inoculant;
-
-  imageBaseName = "docker.io/library/inoculant";
-  image = "${imageBaseName}:${version}";
+  top = config.services.kubernetes;
+  cfg = top.inoculant;
 
   # A real directory of copies, not symlinks: the pod bind-mounts this
   # directory alone (not the wider Nix store), so entries must not point
@@ -30,7 +28,7 @@ let
     ''
     + lib.concatStrings (
       lib.mapAttrsToList (name: manifest: ''
-        install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/"${lib.escapeShellArg "${name}.json"}
+        install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/${lib.escapeShellArg "${name}.json"}"
       '') cfg.manifests
     )
   );
@@ -82,41 +80,23 @@ in
     # "/" or other path-breaking characters).
     manifests = lib.mkOption {
       type = lib.types.attrsOf lib.types.attrs;
-      default = {
-        marker = {
-          apiVersion = "v1";
-          kind = "ConfigMap";
-          metadata.name = "inoculant-marker";
-          data = { };
-        };
-      };
+      default = { };
       description = "Static manifests seeded into manifestsDirectory for inoculant to apply.";
-    };
-
-    # In-container path only: this is where the kubeconfig appears inside
-    # the pod (mountPath + --kubeconfig arg), not a host file the module
-    # must create. The host-side source is always the generated kubeconfig
-    # store path, so overriding this is safe regardless of where it lives
-    # on the host.
-    kubeconfig = lib.mkOption {
-      type = lib.types.externalPath;
-      default = "/etc/inoculant/kubeconfig";
     };
   };
 
   config = lib.mkIf cfg.enable (
     let
-      # A Nix store path, not an /etc file: mirrors how nixpkgs' own
+      image = "docker.io/library/inoculant:${version}";
+
+      # A Nix store path, not an /etc file. Cert rotation doesn't
+      # trigger a new kubeconfig file. mirrors how nixpkgs' own
       # kubelet/kube-proxy/scheduler/controller-manager consume their
-      # kubeconfigs (mkKubeConfig result passed directly to the consumer),
-      # rather than round-tripping through /etc like the shared
-      # cluster-admin kubeconfig does. This keeps cfg.kubeconfig purely an
-      # in-container path: overriding it can't desync it from the file
-      # actually mounted in.
-      kubeconfigFile = config.services.kubernetes.lib.mkKubeConfig "inoculant" {
-        server = config.services.kubernetes.apiserverAddress;
-        certFile = config.services.kubernetes.pki.certs.inoculant.cert;
-        keyFile = config.services.kubernetes.pki.certs.inoculant.key;
+      # kubeconfigs,
+      kubeconfigFile = top.lib.mkKubeConfig "inoculant" {
+        server = top.apiserverAddress;
+        certFile = top.pki.certs.inoculant.cert;
+        keyFile = top.pki.certs.inoculant.key;
       };
     in
     {
@@ -132,11 +112,8 @@ in
       ];
 
       # Own x509 identity instead of reusing the shared cluster-admin
-      # kubeconfig, so the pod only needs its own cert/key mounted rather than
-      # the whole secretsPath directory (every other component's certs + the
-      # service-account signing key). O=system:masters keeps it
-      # cluster-admin-equivalent, same as the cluster-admin cert itself.
-      services.kubernetes.pki.certs.inoculant = config.services.kubernetes.lib.mkCert {
+      # kubeconfig, similar to how addonManager is implemented
+      services.kubernetes.pki.certs.inoculant = top.lib.mkCert {
         name = "inoculant";
         CN = "inoculant";
         fields.O = "system:masters";
@@ -159,34 +136,34 @@ in
               image = image;
               args = [
                 "--kubeconfig"
-                cfg.kubeconfig
+                "/etc/inoculant/kubeconfig"
                 "apply"
-                "/manifests"
+                "/etc/inoculant/manifests"
               ];
               volumeMounts = [
                 {
                   name = "kubeconfig";
-                  mountPath = cfg.kubeconfig;
+                  mountPath = "/etc/inoculant/kubeconfig";
                   readOnly = true;
                 }
                 {
                   name = "ca-cert";
-                  mountPath = config.services.kubernetes.caFile;
+                  mountPath = top.caFile;
                   readOnly = true;
                 }
                 {
                   name = "client-cert";
-                  mountPath = config.services.kubernetes.pki.certs.inoculant.cert;
+                  mountPath = top.pki.certs.inoculant.cert;
                   readOnly = true;
                 }
                 {
                   name = "client-key";
-                  mountPath = config.services.kubernetes.pki.certs.inoculant.key;
+                  mountPath = top.pki.certs.inoculant.key;
                   readOnly = true;
                 }
                 {
                   name = "manifests";
-                  mountPath = "/manifests";
+                  mountPath = "/etc/inoculant/manifests";
                   readOnly = true;
                 }
               ];
@@ -199,15 +176,15 @@ in
             }
             {
               name = "ca-cert";
-              hostPath.path = config.services.kubernetes.caFile;
+              hostPath.path = top.caFile;
             }
             {
               name = "client-cert";
-              hostPath.path = config.services.kubernetes.pki.certs.inoculant.cert;
+              hostPath.path = top.pki.certs.inoculant.cert;
             }
             {
               name = "client-key";
-              hostPath.path = config.services.kubernetes.pki.certs.inoculant.key;
+              hostPath.path = top.pki.certs.inoculant.key;
             }
             {
               name = "manifests";
