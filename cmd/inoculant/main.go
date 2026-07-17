@@ -17,6 +17,10 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig file")
 	rootCmd.AddCommand(applyCmd)
+
+	bootstrapCmd.Flags().StringArrayVar(&bootstrapAllowGVKs, "allow", nil, "GVK to allow: GROUP/VERSION/KIND (repeatable; empty group: /v1/ConfigMap)")
+	bootstrapCmd.Flags().StringVar(&bootstrapOutput, "output", "/scoped-kubeconfig/kubeconfig", "Path to write the scoped kubeconfig")
+	rootCmd.AddCommand(bootstrapCmd)
 }
 
 func main() {
