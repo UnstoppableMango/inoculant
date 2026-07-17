@@ -83,18 +83,20 @@
           };
 
           devShells.default = pkgs.mkShellNoCC {
-            packages = with pkgs; [
-              containerd
-              direnv
-              go
-              gomod2nix
-              gopls
-              ginkgo
-              gnumake
-              nixfmt
-              skopeo
-              watchexec
-            ];
+            packages =
+              with pkgs;
+              [
+                direnv
+                go
+                gomod2nix
+                gopls
+                ginkgo
+                gnumake
+                nixfmt
+                skopeo
+                watchexec
+              ]
+              ++ lib.optionals pkgs.stdenv.isLinux [ containerd ];
 
             GO = "${pkgs.go}/bin/go";
             GOMOD2NIX = "${pkgs.gomod2nix}/bin/gomod2nix";
