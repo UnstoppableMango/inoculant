@@ -93,6 +93,32 @@ in
       default = [ ];
       description = "Extra manifest files or directories copied into manifestsDirectory verbatim, alongside `manifests`.";
     };
+
+    allowedGVKs = lib.mkOption {
+      type = lib.types.listOf (lib.types.submodule {
+        options = {
+          group = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "API group. Empty string for core resources (v1).";
+          };
+          version = lib.mkOption {
+            type = lib.types.str;
+            description = "API version (e.g. v1, v1beta1).";
+          };
+          kind = lib.mkOption {
+            type = lib.types.str;
+            description = "Resource kind (e.g. ConfigMap, Deployment).";
+          };
+        };
+      });
+      default = [ ];
+      description = ''
+        Additional GVKs inoculant is permitted to apply, beyond those
+        auto-derived from `manifests`. Required when using `manifestFiles`.
+        Empty combined list (no manifests, no explicit entries) = all GVKs permitted.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (
@@ -103,6 +129,33 @@ in
       # inoculant fills the same role as addonManager's bootstrapAddons phase —
       # first-boot cluster init — so cluster-admin is the appropriate credential.
       kubeconfigFile = top.pki.clusterAdminKubeconfig;
+
+      # Derive permitted GVKs from cfg.manifests (known at eval time) plus any
+      # explicit cfg.allowedGVKs entries needed for manifestFiles. Empty list
+      # means no --allowed-gvk flags are passed and inoculant permits all GVKs.
+      effectiveAllowedGVKs =
+        let
+          extractGVK = manifest:
+            let
+              apiVersion = manifest.apiVersion or "";
+              kind = manifest.kind or "";
+              parts = lib.splitString "/" apiVersion;
+              group = if builtins.length parts == 2 then builtins.elemAt parts 0 else "";
+              version = if builtins.length parts == 2 then builtins.elemAt parts 1 else apiVersion;
+            in
+            { inherit group version kind; };
+          fromManifests = lib.unique (map extractGVK (lib.attrValues cfg.manifests));
+        in
+        lib.unique (fromManifests ++ cfg.allowedGVKs);
+
+      allowedGVKArgs = lib.concatMap (gvk:
+        let
+          gvkStr = if gvk.group != ""
+                   then "${gvk.group}/${gvk.version}/${gvk.kind}"
+                   else "${gvk.version}/${gvk.kind}";
+        in
+        [ "--allowed-gvk" gvkStr ]
+      ) effectiveAllowedGVKs;
     in
     {
       # TODO: this reimports the archive on every kubelet restart (e.g. cert
@@ -136,7 +189,7 @@ in
                 "/etc/inoculant/kubeconfig"
                 "apply"
                 "/etc/inoculant/manifests"
-              ];
+              ] ++ allowedGVKArgs;
               volumeMounts = [
                 {
                   name = "kubeconfig";
