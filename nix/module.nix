@@ -99,15 +99,10 @@ in
     let
       image = "docker.io/library/inoculant:${version}";
 
-      # A Nix store path, not an /etc file. Cert rotation doesn't
-      # trigger a new kubeconfig file. mirrors how nixpkgs' own
-      # kubelet/kube-proxy/scheduler/controller-manager consume their
-      # kubeconfigs,
-      kubeconfigFile = top.lib.mkKubeConfig "inoculant" {
-        server = top.apiserverAddress;
-        certFile = top.pki.certs.inoculant.cert;
-        keyFile = top.pki.certs.inoculant.key;
-      };
+      # Use the cluster-admin kubeconfig that NixOS PKI already provisions.
+      # inoculant fills the same role as addonManager's bootstrapAddons phase —
+      # first-boot cluster init — so cluster-admin is the appropriate credential.
+      kubeconfigFile = top.pki.clusterAdminKubeconfig;
     in
     {
       # TODO: this reimports the archive on every kubelet restart (e.g. cert
@@ -120,14 +115,6 @@ in
       systemd.tmpfiles.rules = [
         "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
       ];
-
-      # Own x509 identity instead of reusing the shared cluster-admin
-      # kubeconfig, similar to how addonManager is implemented
-      services.kubernetes.pki.certs.inoculant = top.lib.mkCert {
-        name = "inoculant";
-        CN = "inoculant";
-        fields.O = "system:masters";
-      };
 
       services.kubernetes.kubelet.manifests.inoculant = {
         apiVersion = "v1";
@@ -163,12 +150,12 @@ in
                 }
                 {
                   name = "client-cert";
-                  mountPath = top.pki.certs.inoculant.cert;
+                  mountPath = top.pki.certs.clusterAdmin.cert;
                   readOnly = true;
                 }
                 {
                   name = "client-key";
-                  mountPath = top.pki.certs.inoculant.key;
+                  mountPath = top.pki.certs.clusterAdmin.key;
                   readOnly = true;
                 }
                 {
@@ -190,11 +177,11 @@ in
             }
             {
               name = "client-cert";
-              hostPath.path = top.pki.certs.inoculant.cert;
+              hostPath.path = top.pki.certs.clusterAdmin.cert;
             }
             {
               name = "client-key";
-              hostPath.path = top.pki.certs.inoculant.key;
+              hostPath.path = top.pki.certs.clusterAdmin.key;
             }
             {
               name = "manifests";
