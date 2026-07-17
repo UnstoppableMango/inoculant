@@ -17,6 +17,21 @@ testers.nixosTest {
             data = { };
           };
         };
+        # Exercises manifestFiles' raw multi-document YAML support, distinct
+        # from the attrs-based `manifests` above.
+        inoculant.manifestFiles = [
+          (pkgs.writeText "extra-markers.yaml" ''
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: inoculant-extra-marker-a
+            ---
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: inoculant-extra-marker-b
+          '')
+        ];
 
         roles = [
           "master"
@@ -50,6 +65,12 @@ testers.nixosTest {
     machine.wait_until_succeeds(
         "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-marker",
         timeout=60,
+    )
+    machine.succeed(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-extra-marker-a"
+    )
+    machine.succeed(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-extra-marker-b"
     )
   '';
 }

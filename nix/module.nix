@@ -31,6 +31,10 @@ let
         install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/"${lib.escapeShellArg "${name}.json"}
       '') cfg.manifests
     )
+    + lib.concatMapStrings (src: ''
+      cp -r --no-preserve=mode,ownership ${src} "$out/$(basename ${src})"
+      chmod -R a+rX "$out/$(basename ${src})"
+    '') cfg.manifestFiles
   );
 in
 {
@@ -82,6 +86,12 @@ in
       type = lib.types.attrsOf lib.types.attrs;
       default = { };
       description = "Static manifests seeded into manifestsDirectory for inoculant to apply.";
+    };
+
+    manifestFiles = lib.mkOption {
+      type = lib.types.listOf lib.types.path;
+      default = [ ];
+      description = "Extra manifest files or directories copied into manifestsDirectory verbatim, alongside `manifests`.";
     };
   };
 
