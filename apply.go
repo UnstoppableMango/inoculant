@@ -2,10 +2,7 @@ package inoculant
 
 import (
 	"context"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,31 +13,11 @@ import (
 )
 
 func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
-	mapper, dynClient, err := newClients(cfg)
+	client, err := New(cfg)
 	if err != nil {
 		return err
 	}
-
-	dir, err = filepath.EvalSymlinks(dir)
-	if err != nil {
-		return err
-	}
-
-	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext != ".yaml" && ext != ".yml" && ext != ".json" {
-			return nil
-		}
-
-		return applyFile(ctx, path, ext, mapper, dynClient)
-	})
+	return client.Apply(ctx, dir)
 }
 
 func applyFile(ctx context.Context, path, ext string, mapper meta.RESTMapper, dynClient dynamic.Interface) error {
