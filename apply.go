@@ -2,6 +2,7 @@ package inoculant
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,7 +16,14 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
+// Options configures Apply behavior.
+type Options struct {
+	// AllowedGVKs restricts which GroupVersionKinds inoculant will apply.
+	// Empty slice means all GVKs are permitted.
+	AllowedGVKs []schema.GroupVersionKind
+}
+
+func Apply(ctx context.Context, dir string, cfg *rest.Config, opts Options) error {
 	mapper, dynClient, err := newClients(cfg)
 	if err != nil {
 		return err
@@ -39,11 +47,11 @@ func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
 			return nil
 		}
 
-		return applyFile(ctx, path, ext, mapper, dynClient)
+		return applyFile(ctx, path, ext, opts, mapper, dynClient)
 	})
 }
 
-func applyFile(ctx context.Context, path, ext string, mapper meta.RESTMapper, dynClient dynamic.Interface) error {
+func applyFile(ctx context.Context, path, ext string, opts Options, mapper meta.RESTMapper, dynClient dynamic.Interface) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -64,15 +72,20 @@ func applyFile(ctx context.Context, path, ext string, mapper meta.RESTMapper, dy
 	}
 
 	for _, obj := range objs {
-		if err := applyObject(ctx, obj, mapper, dynClient); err != nil {
+		if err := applyObject(ctx, obj, opts, mapper, dynClient); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func applyObject(ctx context.Context, obj *unstructured.Unstructured, mapper meta.RESTMapper, dynClient dynamic.Interface) error {
+func applyObject(ctx context.Context, obj *unstructured.Unstructured, opts Options, mapper meta.RESTMapper, dynClient dynamic.Interface) error {
 	gvk := obj.GroupVersionKind()
+
+	if len(opts.AllowedGVKs) > 0 && !gvkAllowed(gvk, opts.AllowedGVKs) {
+		return fmt.Errorf("GVK %s not in allowed list", gvk)
+	}
+
 	mapping, err := mapper.RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
 	if err != nil {
 		return err
@@ -91,4 +104,13 @@ func applyObject(ctx context.Context, obj *unstructured.Unstructured, mapper met
 
 	_, err = ri.Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: "inoculant", Force: true})
 	return err
+}
+
+func gvkAllowed(gvk schema.GroupVersionKind, allowed []schema.GroupVersionKind) bool {
+	for _, a := range allowed {
+		if a == gvk {
+			return true
+		}
+	}
+	return false
 }
