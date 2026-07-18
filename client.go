@@ -40,8 +40,8 @@ func New(cfg *rest.Config) (*Inoculant, error) {
 	}, nil
 }
 
-func (i *Inoculant) Apply(ctx context.Context, dir string) (err error) {
-	dir, err = filepath.EvalSymlinks(dir)
+func (i *Inoculant) Apply(ctx context.Context, dir string) error {
+	dir, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		return err
 	}
