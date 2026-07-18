@@ -9,6 +9,11 @@ import (
 
 var kubeconfig string
 
+var (
+	bootstrapAllowGVKs []string
+	bootstrapOutput    string
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "inoculant",
 	Short: "Inoculant is a tool for bootstrapping Kubernetes resources",
