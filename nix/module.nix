@@ -48,7 +48,9 @@ let
       group = if lib.length parts == 2 then lib.head parts else "";
       ver = lib.last parts;
     in
-    { inherit group ver kind; }
+    {
+      inherit group ver kind;
+    }
   ) cfg.manifests;
 
   allAllowedGVKs = lib.unique (derivedGVKs ++ cfg.additionalAllowedGVKs);
@@ -56,7 +58,12 @@ let
   # --allow GROUP/VERSION/KIND args for the bootstrap init container.
   # Empty group uses the empty string (core API).
   allowArgs = lib.concatMap (
-    { group, ver, kind }: [
+    {
+      group,
+      ver,
+      kind,
+    }:
+    [
       "--allow"
       "${group}/${ver}/${kind}"
     ]
@@ -193,15 +200,14 @@ in
             {
               name = "inoculant-bootstrap";
               image = image;
-              args =
-                [
-                  "--kubeconfig"
-                  "/etc/inoculant/cluster-admin.kubeconfig"
-                  "bootstrap"
-                  "--output"
-                  "/scoped-kubeconfig/kubeconfig"
-                ]
-                ++ allowArgs;
+              args = [
+                "--kubeconfig"
+                "/etc/inoculant/cluster-admin.kubeconfig"
+                "bootstrap"
+                "--output"
+                "/scoped-kubeconfig/kubeconfig"
+              ]
+              ++ allowArgs;
               volumeMounts = [
                 {
                   name = "cluster-admin-kubeconfig";
