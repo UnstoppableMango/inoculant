@@ -151,10 +151,18 @@ in
     let
       image = "docker.io/library/inoculant:${version}";
 
-      # Use the cluster-admin kubeconfig that NixOS PKI already provisions.
+      # top.pki.clusterAdminKubeconfig is a private let-binding inside nixpkgs'
+      # pki.nix, not an exposed option, so we can't reach it here. Rebuild it
+      # the same way pki.nix does internally (and the way addonManager builds
+      # its own kubeconfig): mkKubeConfig + the clusterAdmin cert PKI already
+      # provisions.
       # The bootstrap init container needs it to create RBAC resources;
       # the main container uses only the scoped token written by the init container.
-      kubeconfigFile = top.pki.clusterAdminKubeconfig;
+      kubeconfigFile = top.lib.mkKubeConfig "cluster-admin" {
+        server = top.apiserverAddress;
+        certFile = top.pki.certs.clusterAdmin.cert;
+        keyFile = top.pki.certs.clusterAdmin.key;
+      };
     in
     {
       # TODO: this reimports the archive on every kubelet restart (e.g. cert

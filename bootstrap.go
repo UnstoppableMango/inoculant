@@ -13,21 +13,14 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 const (
 	bootstrapNamespace = "kube-system"
 	bootstrapName      = "inoculant"
 )
-
-// GVK identifies a Kubernetes resource type by group, version, and kind.
-type GVK struct {
-	Group   string
-	Version string
-	Kind    string
-}
 
 var (
 	saGVR  = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}
@@ -38,7 +31,7 @@ var (
 // Bootstrap creates a ServiceAccount, ClusterRole, and ClusterRoleBinding scoped
 // to the given GVKs, then writes a token-based kubeconfig to outputPath.
 // Intended to run as an init container using the cluster-admin credential.
-func Bootstrap(ctx context.Context, cfg *rest.Config, gvks []GVK, outputPath string) error {
+func Bootstrap(ctx context.Context, cfg *rest.Config, gvks []schema.GroupVersionKind, outputPath string) error {
 	mapper, dynClient, err := newClients(cfg)
 	if err != nil {
 		return err
@@ -82,7 +75,7 @@ func Bootstrap(ctx context.Context, cfg *rest.Config, gvks []GVK, outputPath str
 
 type policyRule struct{ group, resource string }
 
-func rbacRules(gvks []GVK, mapper meta.RESTMapper) ([]any, error) {
+func rbacRules(gvks []schema.GroupVersionKind, mapper meta.RESTMapper) ([]any, error) {
 	seen := map[policyRule]bool{}
 	var rules []any
 
