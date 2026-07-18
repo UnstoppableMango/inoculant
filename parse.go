@@ -2,39 +2,29 @@ package inoculant
 
 import (
 	"bytes"
-	"encoding/json"
+	"io"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/yaml"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
-func parseJSON(data []byte) (*unstructured.Unstructured, error) {
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, err
-	}
-	return &unstructured.Unstructured{Object: m}, nil
-}
+// parseManifests decodes a stream of YAML or JSON documents into
+// unstructured objects, matching kubectl's apply semantics.
+func parseManifests(data []byte) ([]*unstructured.Unstructured, error) {
+	dec := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 4096)
 
-func splitYAML(data []byte) ([]*unstructured.Unstructured, error) {
 	var objs []*unstructured.Unstructured
-	for doc := range bytes.SplitSeq(data, []byte("\n---")) {
-		doc = bytes.TrimSpace(doc)
-		if len(doc) == 0 {
-			continue
-		}
-		jsonBytes, err := yaml.YAMLToJSON(doc)
-		if err != nil {
+	for {
+		obj := &unstructured.Unstructured{}
+		if err := dec.Decode(obj); err != nil {
+			if err == io.EOF {
+				return objs, nil
+			}
 			return nil, err
 		}
-		if string(jsonBytes) == "null" {
+		if len(obj.Object) == 0 {
 			continue
-		}
-		obj, err := parseJSON(jsonBytes)
-		if err != nil {
-			return nil, err
 		}
 		objs = append(objs, obj)
 	}
-	return objs, nil
 }

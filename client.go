@@ -16,6 +16,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
+func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
+	client, err := New(cfg)
+	if err != nil {
+		return err
+	}
+	return client.Apply(ctx, dir)
+}
+
 type Inoculant struct {
 	mapper meta.RESTMapper
 	client dynamic.Interface
@@ -51,28 +59,19 @@ func (i *Inoculant) Apply(ctx context.Context, dir string) (err error) {
 			return nil
 		}
 
-		return i.applyFile(ctx, path, ext)
+		return i.applyFile(ctx, path)
 	})
 }
 
-func (i *Inoculant) applyFile(ctx context.Context, path, ext string) error {
+func (i *Inoculant) applyFile(ctx context.Context, path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
-	var objs []*unstructured.Unstructured
-	if ext == ".json" {
-		obj, err := parseJSON(data)
-		if err != nil {
-			return err
-		}
-		objs = []*unstructured.Unstructured{obj}
-	} else {
-		objs, err = splitYAML(data)
-		if err != nil {
-			return err
-		}
+	objs, err := parseManifests(data)
+	if err != nil {
+		return err
 	}
 
 	for _, obj := range objs {
