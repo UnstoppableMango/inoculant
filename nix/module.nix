@@ -37,7 +37,9 @@ let
     '') cfg.manifestFiles
   );
 
-  # Derive allowed GVKs from cfg.manifests (attrset of Nix attrs).
+  # Derive allowed GVKs from cfg.manifests (attrset of Nix attrs — JSON-parseable
+  # at eval time, no IFD required). YAML manifestFiles cannot be parsed without IFD;
+  # use additionalAllowedGVKs for those.
   # apiVersion can be "apps/v1" (group/version) or "v1" (core, empty group).
   derivedGVKs = lib.mapAttrsToList (
     name: manifest:
@@ -62,8 +64,7 @@ let
 
   allAllowedGVKs = lib.unique (derivedGVKs ++ cfg.additionalAllowedGVKs);
 
-  # --allow GROUP/VERSION/KIND args for the bootstrap init container.
-  # Empty group uses the empty string (core API).
+  # --allow GROUP/VERSION/KIND args for setup-rbac.
   allowArgs = lib.concatMap (
     {
       group,
@@ -165,14 +166,21 @@ in
     let
       image = "docker.io/library/inoculant:${version}";
 
+      # A Nix store path, not an /etc file. Cert rotation doesn't trigger a
+      # new kubeconfig file — mirrors how nixpkgs' own kubelet/kube-proxy/
+      # scheduler/controller-manager consume their kubeconfigs.
+      kubeconfigFile = top.lib.mkKubeConfig "inoculant" {
+        server = top.apiserverAddress;
+        certFile = top.pki.certs.inoculant.cert;
+        keyFile = top.pki.certs.inoculant.key;
+      };
+
       # top.pki.clusterAdminKubeconfig is a private let-binding inside nixpkgs'
       # pki.nix, not an exposed option, so we can't reach it here. Rebuild it
-      # the same way pki.nix does internally (and the way addonManager builds
-      # its own kubeconfig): mkKubeConfig + the clusterAdmin cert PKI already
-      # provisions.
-      # The bootstrap init container needs it to create RBAC resources;
-      # the main container uses only the scoped token written by the init container.
-      kubeconfigFile = top.lib.mkKubeConfig "cluster-admin" {
+      # the same way pki.nix does internally: mkKubeConfig + the clusterAdmin
+      # cert PKI already provisions. The setup-rbac service needs it to create
+      # the ClusterRole/ClusterRoleBinding before kubelet starts.
+      clusterAdminKubeconfigFile = top.lib.mkKubeConfig "cluster-admin" {
         server = top.apiserverAddress;
         certFile = top.pki.certs.clusterAdmin.cert;
         keyFile = top.pki.certs.clusterAdmin.key;
@@ -190,6 +198,46 @@ in
         "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
       ];
 
+      # Scoped x509 identity: CN=inoculant, no O. RBAC authorization is provided
+      # by the ClusterRoleBinding created by the inoculant-setup-rbac service below.
+      services.kubernetes.pki.certs.inoculant = top.lib.mkCert {
+        name = "inoculant";
+        CN = "inoculant";
+      };
+
+      # Runs before kubelet so the ClusterRole + ClusterRoleBinding exist before
+      # the inoculant static pod starts. Uses cluster-admin kubeconfig to resolve
+      # GVKs via the live RESTMapper and create the RBAC objects via SSA.
+      systemd.services.inoculant-setup-rbac = {
+        description = "Create inoculant ClusterRole and ClusterRoleBinding";
+        after = [ "kubernetes-apiserver.service" ];
+        before = [ "kubelet.service" ];
+        wantedBy = [ "kubelet.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          # apiserver's own PKI secrets are provisioned asynchronously by certmgr,
+          # so this can start before the apiserver is actually reachable. Retry
+          # like the rest of services.kubernetes' units do rather than failing once.
+          Restart = "on-failure";
+          RestartSec = 2;
+        };
+        unitConfig = {
+          StartLimitIntervalSec = 0;
+        };
+        script = lib.escapeShellArgs (
+          [
+            "${cfg.pkg}/bin/inoculant"
+            "--kubeconfig"
+            clusterAdminKubeconfigFile
+            "setup-rbac"
+            "--user"
+            "inoculant"
+          ]
+          ++ allowArgs
+        );
+      };
+
       services.kubernetes.kubelet.manifests.inoculant = {
         apiVersion = "v1";
         kind = "Pod";
@@ -201,24 +249,20 @@ in
           restartPolicy = "OnFailure";
           hostNetwork = true;
           dnsPolicy = "Default";
-
-          # Phase 1: create scoped RBAC + write token kubeconfig to emptyDir.
-          initContainers = [
+          containers = [
             {
-              name = "inoculant-bootstrap";
+              name = "inoculant";
               image = image;
               args = [
                 "--kubeconfig"
-                "/etc/inoculant/cluster-admin.kubeconfig"
-                "bootstrap"
-                "--output"
-                "/scoped-kubeconfig/kubeconfig"
-              ]
-              ++ allowArgs;
+                "/etc/inoculant/kubeconfig"
+                "apply"
+                "/etc/inoculant/manifests"
+              ];
               volumeMounts = [
                 {
-                  name = "cluster-admin-kubeconfig";
-                  mountPath = "/etc/inoculant/cluster-admin.kubeconfig";
+                  name = "kubeconfig";
+                  mountPath = "/etc/inoculant/kubeconfig";
                   readOnly = true;
                 }
                 {
@@ -228,37 +272,12 @@ in
                 }
                 {
                   name = "client-cert";
-                  mountPath = top.pki.certs.clusterAdmin.cert;
+                  mountPath = top.pki.certs.inoculant.cert;
                   readOnly = true;
                 }
                 {
                   name = "client-key";
-                  mountPath = top.pki.certs.clusterAdmin.key;
-                  readOnly = true;
-                }
-                {
-                  name = "scoped-kubeconfig";
-                  mountPath = "/scoped-kubeconfig";
-                }
-              ];
-            }
-          ];
-
-          # Phase 2: apply manifests using the scoped token kubeconfig.
-          containers = [
-            {
-              name = "inoculant";
-              image = image;
-              args = [
-                "--kubeconfig"
-                "/scoped-kubeconfig/kubeconfig"
-                "apply"
-                "/etc/inoculant/manifests"
-              ];
-              volumeMounts = [
-                {
-                  name = "scoped-kubeconfig";
-                  mountPath = "/scoped-kubeconfig";
+                  mountPath = top.pki.certs.inoculant.key;
                   readOnly = true;
                 }
                 {
@@ -269,10 +288,9 @@ in
               ];
             }
           ];
-
           volumes = [
             {
-              name = "cluster-admin-kubeconfig";
+              name = "kubeconfig";
               hostPath.path = kubeconfigFile;
             }
             {
@@ -281,15 +299,11 @@ in
             }
             {
               name = "client-cert";
-              hostPath.path = top.pki.certs.clusterAdmin.cert;
+              hostPath.path = top.pki.certs.inoculant.cert;
             }
             {
               name = "client-key";
-              hostPath.path = top.pki.certs.clusterAdmin.key;
-            }
-            {
-              name = "scoped-kubeconfig";
-              emptyDir = { };
+              hostPath.path = top.pki.certs.inoculant.key;
             }
             {
               name = "manifests";

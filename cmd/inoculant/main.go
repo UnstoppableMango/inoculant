@@ -14,6 +14,11 @@ var (
 	bootstrapOutput    string
 )
 
+var (
+	setupRBACUser   string
+	setupRBACAllows []string
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "inoculant",
 	Short: "Inoculant is a tool for bootstrapping Kubernetes resources",
@@ -26,6 +31,10 @@ func init() {
 	bootstrapCmd.Flags().StringArrayVar(&bootstrapAllowGVKs, "allow", nil, "GVK to allow: GROUP/VERSION/KIND (repeatable; empty group: /v1/ConfigMap)")
 	bootstrapCmd.Flags().StringVar(&bootstrapOutput, "output", "/scoped-kubeconfig/kubeconfig", "Path to write the scoped kubeconfig")
 	rootCmd.AddCommand(bootstrapCmd)
+
+	setupRBACCmd.Flags().StringVar(&setupRBACUser, "user", "inoculant", "x509 CN to bind the ClusterRole to")
+	setupRBACCmd.Flags().StringArrayVar(&setupRBACAllows, "allow", nil, "GVK to allow: GROUP/VERSION/KIND (repeatable; empty group: /v1/ConfigMap)")
+	rootCmd.AddCommand(setupRBACCmd)
 }
 
 func main() {
