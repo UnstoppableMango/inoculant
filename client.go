@@ -165,22 +165,3 @@ func (i *Inoculant) applyObject(ctx context.Context, obj *unstructured.Unstructu
 	)
 	return err
 }
-
-func newClients(cfg *rest.Config) (meta.RESTMapper, dynamic.Interface, error) {
-	httpClient, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	mapper, err := apiutil.NewDynamicRESTMapper(cfg, httpClient)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	dynClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return mapper, dynClient, nil
-}
