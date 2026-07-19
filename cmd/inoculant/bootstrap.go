@@ -9,6 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+var (
+	bootstrapAllowGVKs []string
+	bootstrapOutput    string
+)
+
 var bootstrapCmd = &cobra.Command{
 	Use:   "bootstrap",
 	Short: "Create scoped RBAC and write a token kubeconfig (runs as init container)",
@@ -42,4 +47,10 @@ func parseGVK(s string) (schema.GroupVersionKind, error) {
 		return schema.GroupVersionKind{}, fmt.Errorf("invalid GVK %q: want GROUP/VERSION/KIND with non-empty VERSION and KIND (empty GROUP allowed)", s)
 	}
 	return schema.GroupVersionKind{Group: parts[0], Version: parts[1], Kind: parts[2]}, nil
+}
+
+func init() {
+	rootCmd.AddCommand(bootstrapCmd)
+	bootstrapCmd.Flags().StringArrayVar(&bootstrapAllowGVKs, "allow", nil, "GVK to allow: GROUP/VERSION/KIND (repeatable; empty group: /v1/ConfigMap)")
+	bootstrapCmd.Flags().StringVar(&bootstrapOutput, "output", "/scoped-kubeconfig/kubeconfig", "Path to write the scoped kubeconfig")
 }
