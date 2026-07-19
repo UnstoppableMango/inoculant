@@ -2,6 +2,7 @@ package inoculant
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,7 +21,7 @@ func parseManifests(data []byte) ([]*unstructured.Unstructured, error) {
 			if err == io.EOF {
 				return objs, nil
 			}
-			return nil, err
+			return nil, fmt.Errorf("decode manifest: %w", err)
 		}
 		if len(obj.Object) == 0 {
 			continue
