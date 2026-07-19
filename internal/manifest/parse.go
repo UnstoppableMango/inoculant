@@ -1,4 +1,6 @@
-package inoculant
+// Package manifest decodes YAML/JSON Kubernetes manifests into unstructured
+// objects.
+package manifest
 
 import (
 	"bytes"
@@ -9,9 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
-// parseManifests decodes a stream of YAML or JSON documents into
-// unstructured objects, matching kubectl's apply semantics.
-func parseManifests(data []byte) ([]*unstructured.Unstructured, error) {
+// Parse decodes a stream of YAML or JSON documents into unstructured
+// objects, matching kubectl's apply semantics.
+func Parse(data []byte) ([]*unstructured.Unstructured, error) {
 	dec := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 4096)
 
 	var objs []*unstructured.Unstructured
