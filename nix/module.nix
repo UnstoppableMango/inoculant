@@ -36,6 +36,45 @@ let
       chmod -R a+rX "$out/$(basename ${src})"
     '') cfg.manifestFiles
   );
+
+  # Derive allowed GVKs from cfg.manifests (attrset of Nix attrs).
+  # apiVersion can be "apps/v1" (group/version) or "v1" (core, empty group).
+  derivedGVKs = lib.mapAttrsToList (
+    name: manifest:
+    let
+      apiVersion = manifest.apiVersion or (throw "manifest missing apiVersion");
+      kind = manifest.kind or (throw "manifest missing kind");
+      parts = lib.splitString "/" apiVersion;
+      group = if lib.length parts == 2 then lib.head parts else "";
+      ver = lib.last parts;
+    in
+    if
+      (lib.length parts != 1 && lib.length parts != 2)
+      || ver == ""
+      || (lib.length parts == 2 && group == "")
+    then
+      throw "manifest ${name}: invalid apiVersion ${apiVersion}, want VERSION or GROUP/VERSION with non-empty parts"
+    else
+      {
+        inherit group ver kind;
+      }
+  ) cfg.manifests;
+
+  allAllowedGVKs = lib.unique (derivedGVKs ++ cfg.additionalAllowedGVKs);
+
+  # --allow GROUP/VERSION/KIND args for the bootstrap init container.
+  # Empty group uses the empty string (core API).
+  allowArgs = lib.concatMap (
+    {
+      group,
+      ver,
+      kind,
+    }:
+    [
+      "--allow"
+      "${group}/${ver}/${kind}"
+    ]
+  ) allAllowedGVKs;
 in
 {
   options.services.kubernetes.inoculant = {
@@ -93,20 +132,50 @@ in
       default = [ ];
       description = "Extra manifest files or directories copied into manifestsDirectory verbatim, alongside `manifests`.";
     };
+
+    # GVKs inoculant may apply that cannot be auto-derived at eval time
+    # (e.g. resources declared in YAML manifestFiles, which Nix cannot parse
+    # without IFD). Values are merged with GVKs auto-derived from `manifests`.
+    additionalAllowedGVKs = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            group = lib.mkOption {
+              type = lib.types.str;
+              default = "";
+              description = "API group (empty string for core API).";
+            };
+            ver = lib.mkOption {
+              type = lib.types.str;
+              description = "API version (e.g. v1, v1beta1).";
+            };
+            kind = lib.mkOption {
+              type = lib.types.str;
+              description = "Resource kind (e.g. Deployment, ConfigMap).";
+            };
+          };
+        }
+      );
+      default = [ ];
+      description = "Extra GVKs inoculant is permitted to apply, beyond those auto-derived from `manifests`. This is the only way to grant permissions for resources coming from `manifestFiles`, since Nix cannot introspect those files' contents at eval time.";
+    };
   };
 
   config = lib.mkIf cfg.enable (
     let
       image = "docker.io/library/inoculant:${version}";
 
-      # A Nix store path, not an /etc file. Cert rotation doesn't
-      # trigger a new kubeconfig file. mirrors how nixpkgs' own
-      # kubelet/kube-proxy/scheduler/controller-manager consume their
-      # kubeconfigs,
-      kubeconfigFile = top.lib.mkKubeConfig "inoculant" {
+      # top.pki.clusterAdminKubeconfig is a private let-binding inside nixpkgs'
+      # pki.nix, not an exposed option, so we can't reach it here. Rebuild it
+      # the same way pki.nix does internally (and the way addonManager builds
+      # its own kubeconfig): mkKubeConfig + the clusterAdmin cert PKI already
+      # provisions.
+      # The bootstrap init container needs it to create RBAC resources;
+      # the main container uses only the scoped token written by the init container.
+      kubeconfigFile = top.lib.mkKubeConfig "cluster-admin" {
         server = top.apiserverAddress;
-        certFile = top.pki.certs.inoculant.cert;
-        keyFile = top.pki.certs.inoculant.key;
+        certFile = top.pki.certs.clusterAdmin.cert;
+        keyFile = top.pki.certs.clusterAdmin.key;
       };
     in
     {
@@ -121,14 +190,6 @@ in
         "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
       ];
 
-      # Own x509 identity instead of reusing the shared cluster-admin
-      # kubeconfig, similar to how addonManager is implemented
-      services.kubernetes.pki.certs.inoculant = top.lib.mkCert {
-        name = "inoculant";
-        CN = "inoculant";
-        fields.O = "system:masters";
-      };
-
       services.kubernetes.kubelet.manifests.inoculant = {
         apiVersion = "v1";
         kind = "Pod";
@@ -140,20 +201,24 @@ in
           restartPolicy = "OnFailure";
           hostNetwork = true;
           dnsPolicy = "Default";
-          containers = [
+
+          # Phase 1: create scoped RBAC + write token kubeconfig to emptyDir.
+          initContainers = [
             {
-              name = "inoculant";
+              name = "inoculant-bootstrap";
               image = image;
               args = [
                 "--kubeconfig"
-                "/etc/inoculant/kubeconfig"
-                "apply"
-                "/etc/inoculant/manifests"
-              ];
+                "/etc/inoculant/cluster-admin.kubeconfig"
+                "bootstrap"
+                "--output"
+                "/scoped-kubeconfig/kubeconfig"
+              ]
+              ++ allowArgs;
               volumeMounts = [
                 {
-                  name = "kubeconfig";
-                  mountPath = "/etc/inoculant/kubeconfig";
+                  name = "cluster-admin-kubeconfig";
+                  mountPath = "/etc/inoculant/cluster-admin.kubeconfig";
                   readOnly = true;
                 }
                 {
@@ -163,12 +228,37 @@ in
                 }
                 {
                   name = "client-cert";
-                  mountPath = top.pki.certs.inoculant.cert;
+                  mountPath = top.pki.certs.clusterAdmin.cert;
                   readOnly = true;
                 }
                 {
                   name = "client-key";
-                  mountPath = top.pki.certs.inoculant.key;
+                  mountPath = top.pki.certs.clusterAdmin.key;
+                  readOnly = true;
+                }
+                {
+                  name = "scoped-kubeconfig";
+                  mountPath = "/scoped-kubeconfig";
+                }
+              ];
+            }
+          ];
+
+          # Phase 2: apply manifests using the scoped token kubeconfig.
+          containers = [
+            {
+              name = "inoculant";
+              image = image;
+              args = [
+                "--kubeconfig"
+                "/scoped-kubeconfig/kubeconfig"
+                "apply"
+                "/etc/inoculant/manifests"
+              ];
+              volumeMounts = [
+                {
+                  name = "scoped-kubeconfig";
+                  mountPath = "/scoped-kubeconfig";
                   readOnly = true;
                 }
                 {
@@ -179,9 +269,10 @@ in
               ];
             }
           ];
+
           volumes = [
             {
-              name = "kubeconfig";
+              name = "cluster-admin-kubeconfig";
               hostPath.path = kubeconfigFile;
             }
             {
@@ -190,11 +281,15 @@ in
             }
             {
               name = "client-cert";
-              hostPath.path = top.pki.certs.inoculant.cert;
+              hostPath.path = top.pki.certs.clusterAdmin.cert;
             }
             {
               name = "client-key";
-              hostPath.path = top.pki.certs.inoculant.key;
+              hostPath.path = top.pki.certs.clusterAdmin.key;
+            }
+            {
+              name = "scoped-kubeconfig";
+              emptyDir = { };
             }
             {
               name = "manifests";
