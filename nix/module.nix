@@ -40,7 +40,7 @@ let
   # Derive allowed GVKs from cfg.manifests (attrset of Nix attrs).
   # apiVersion can be "apps/v1" (group/version) or "v1" (core, empty group).
   derivedGVKs = lib.mapAttrsToList (
-    _: manifest:
+    name: manifest:
     let
       apiVersion = manifest.apiVersion or (throw "manifest missing apiVersion");
       kind = manifest.kind or (throw "manifest missing kind");
@@ -48,9 +48,16 @@ let
       group = if lib.length parts == 2 then lib.head parts else "";
       ver = lib.last parts;
     in
-    {
-      inherit group ver kind;
-    }
+    if
+      (lib.length parts != 1 && lib.length parts != 2)
+      || ver == ""
+      || (lib.length parts == 2 && group == "")
+    then
+      throw "manifest ${name}: invalid apiVersion ${apiVersion}, want VERSION or GROUP/VERSION with non-empty parts"
+    else
+      {
+        inherit group ver kind;
+      }
   ) cfg.manifests;
 
   allAllowedGVKs = lib.unique (derivedGVKs ++ cfg.additionalAllowedGVKs);
@@ -150,7 +157,7 @@ in
         }
       );
       default = [ ];
-      description = "Extra GVKs inoculant is permitted to apply, beyond those auto-derived from `manifests`.";
+      description = "Extra GVKs inoculant is permitted to apply, beyond those auto-derived from `manifests`. This is the only way to grant permissions for resources coming from `manifestFiles`, since Nix cannot introspect those files' contents at eval time.";
     };
   };
 

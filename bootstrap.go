@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	authv1 "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -178,6 +179,12 @@ func writeScopedKubeconfig(cfg *rest.Config, token, outputPath string) error {
 		AuthInfo: bootstrapName,
 	}
 	kc.CurrentContext = bootstrapName
+
+	if dir := filepath.Dir(outputPath); dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create output directory: %w", err)
+		}
+	}
 
 	return clientcmd.WriteToFile(*kc, outputPath)
 }

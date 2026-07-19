@@ -13,6 +13,10 @@ var bootstrapCmd = &cobra.Command{
 	Use:   "bootstrap",
 	Short: "Create scoped RBAC and write a token kubeconfig (runs as init container)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(bootstrapAllowGVKs) == 0 {
+			return fmt.Errorf("--allow is required: bootstrap with no allowed GVKs produces a ClusterRole that can apply nothing")
+		}
+
 		cfg, err := restConfig()
 		if err != nil {
 			return err
@@ -31,11 +35,11 @@ var bootstrapCmd = &cobra.Command{
 	},
 }
 
-// parseGVK parses GROUP/VERSION/KIND (empty group: /VERSION/KIND).
+// parseGVK parses GROUP/VERSION/KIND (empty group allowed: /VERSION/KIND).
 func parseGVK(s string) (schema.GroupVersionKind, error) {
 	parts := strings.SplitN(s, "/", 3)
-	if len(parts) != 3 {
-		return schema.GroupVersionKind{}, fmt.Errorf("invalid GVK %q: want GROUP/VERSION/KIND", s)
+	if len(parts) != 3 || parts[1] == "" || parts[2] == "" {
+		return schema.GroupVersionKind{}, fmt.Errorf("invalid GVK %q: want GROUP/VERSION/KIND with non-empty VERSION and KIND (empty GROUP allowed)", s)
 	}
 	return schema.GroupVersionKind{Group: parts[0], Version: parts[1], Kind: parts[2]}, nil
 }
