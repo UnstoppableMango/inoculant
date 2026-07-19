@@ -3,12 +3,24 @@ package inoculant
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	corev1 "k8s.io/client-go/applyconfigurations/core/v1"
 	metav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	rbacv1 "k8s.io/client-go/applyconfigurations/rbac/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+const (
+	bootstrapNamespace = "kube-system"
+	bootstrapName      = "inoculant"
+)
+
+type policyRule struct{ group, resource string }
 
 func (i *Inoculant) applyServiceAccount(ctx context.Context) error {
 	cfg := &corev1.ServiceAccountApplyConfiguration{
@@ -91,4 +103,35 @@ func (i *Inoculant) applyClusterRoleBinding(ctx context.Context) error {
 
 	_, err := i.clientset.RbacV1().ClusterRoleBindings().Apply(ctx, cfg, applyOpts)
 	return err
+}
+
+func writeScopedKubeconfig(cfg *rest.Config, token, outputPath string) error {
+	caData := cfg.CAData
+	if len(caData) == 0 && cfg.TLSClientConfig.CAFile != "" {
+		var err error
+		caData, err = os.ReadFile(cfg.TLSClientConfig.CAFile)
+		if err != nil {
+			return fmt.Errorf("read CA file: %w", err)
+		}
+	}
+
+	kc := clientcmdapi.NewConfig()
+	kc.Clusters[bootstrapName] = &clientcmdapi.Cluster{
+		Server:                   cfg.Host,
+		CertificateAuthorityData: caData,
+	}
+	kc.AuthInfos[bootstrapName] = &clientcmdapi.AuthInfo{Token: token}
+	kc.Contexts[bootstrapName] = &clientcmdapi.Context{
+		Cluster:  bootstrapName,
+		AuthInfo: bootstrapName,
+	}
+	kc.CurrentContext = bootstrapName
+
+	if dir := filepath.Dir(outputPath); dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create output directory: %w", err)
+		}
+	}
+
+	return clientcmd.WriteToFile(*kc, outputPath)
 }

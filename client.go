@@ -32,7 +32,16 @@ func Apply(ctx context.Context, dir string, cfg *rest.Config) error {
 	return client.Apply(ctx, dir)
 }
 
+func Bootstrap(ctx context.Context, cfg *rest.Config, gvks []schema.GroupVersionKind, output string) error {
+	client, err := New(cfg)
+	if err != nil {
+		return err
+	}
+	return client.Bootstrap(ctx, gvks, output)
+}
+
 type Inoculant struct {
+	cfg       *rest.Config
 	mapper    meta.RESTMapper
 	client    dynamic.Interface
 	clientset *kubernetes.Clientset
@@ -44,7 +53,7 @@ func New(cfg *rest.Config) (*Inoculant, error) {
 		return nil, err
 	}
 
-	c := &Inoculant{}
+	c := &Inoculant{cfg: cfg}
 	if c.mapper, err = apiutil.NewDynamicRESTMapper(cfg, http); err != nil {
 		return nil, err
 	}
@@ -103,10 +112,7 @@ func (i *Inoculant) Bootstrap(ctx context.Context, gvks []schema.GroupVersionKin
 	if err != nil {
 		return fmt.Errorf("create token: %w", err)
 	}
-	fmt.Println("got token", tokenResp.Status.Token)
-
-	return nil
-	// return writeScopedKubeconfig(cfg, tokenResp.Status.Token, outputPath)
+	return writeScopedKubeconfig(i.cfg, tokenResp.Status.Token, outputPath)
 }
 
 func (i *Inoculant) applyFile(ctx context.Context, path string) error {

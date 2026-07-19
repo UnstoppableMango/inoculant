@@ -18,3 +18,7 @@ var applyCmd = &cobra.Command{
 		return inoculant.Apply(cmd.Context(), args[0], cfg)
 	},
 }
+
+func init() {
+	rootCmd.AddCommand(applyCmd)
+}
