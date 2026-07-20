@@ -157,6 +157,8 @@ func writeScopedKubeconfig(cfg *rest.Config, token, outputPath string) error {
 	kc.Clusters[name] = &clientcmdapi.Cluster{
 		Server:                   cfg.Host,
 		CertificateAuthorityData: caData,
+		InsecureSkipTLSVerify:    cfg.TLSClientConfig.Insecure,
+		TLSServerName:            cfg.TLSClientConfig.ServerName,
 	}
 	kc.AuthInfos[name] = &clientcmdapi.AuthInfo{Token: token}
 	kc.Contexts[name] = &clientcmdapi.Context{
