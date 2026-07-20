@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
@@ -22,6 +23,8 @@ func TestIntegration(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	klog.SetOutput(GinkgoWriter)
+
 	ctx = context.Background()
 	testEnv = &envtest.Environment{}
 	var err error
