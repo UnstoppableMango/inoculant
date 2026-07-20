@@ -1,10 +1,13 @@
 package main
 
 import (
+	"flag"
+
 	"github.com/spf13/cobra"
 	"github.com/unmango/go/cli"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
 )
 
 var kubeconfig string
@@ -16,10 +19,16 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig file")
+
+	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+	rootCmd.PersistentFlags().AddGoFlagSet(klogFlags)
 }
 
 func main() {
-	if err := rootCmd.Execute(); err != nil {
+	err := rootCmd.Execute()
+	klog.Flush()
+	if err != nil {
 		cli.Fail(err)
 	}
 }
