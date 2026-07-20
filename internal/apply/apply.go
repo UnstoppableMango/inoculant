@@ -49,12 +49,13 @@ func (a *Applier) Apply(ctx context.Context, dir string) error {
 		}
 
 		ext := strings.ToLower(filepath.Ext(path))
-		if ext != ".yaml" && ext != ".yml" && ext != ".json" {
+		switch ext {
+		case ".yaml", ".yml", ".json":
+			return a.applyFile(ctx, path)
+		default:
 			klog.V(1).InfoS("skipping non-manifest file", "path", path)
-			return nil
 		}
-
-		return a.applyFile(ctx, path)
+		return nil
 	})
 }
 
@@ -100,7 +101,7 @@ func (a *Applier) applyObject(ctx context.Context, obj *unstructured.Unstructure
 
 	klog.InfoS("applying object", "kind", gvk.Kind, "namespace", obj.GetNamespace(), "name", obj.GetName())
 
-	if _, err := ri.Apply(ctx, obj.GetName(), obj, client.ApplyOptions); err != nil {
+	if _, err := ri.Apply(ctx, obj.GetName(), obj, client.ApplyOptions()); err != nil {
 		return fmt.Errorf("apply %s %s/%s: %w", gvk.Kind, obj.GetNamespace(), obj.GetName(), err)
 	}
 	return nil

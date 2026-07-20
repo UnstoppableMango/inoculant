@@ -22,11 +22,12 @@ import (
 )
 
 const (
-	bootstrapNamespace = "kube-system"
-	bootstrapName      = "inoculant"
-	// bootstrapTokenTTLSeconds is how long the token written to the scoped
+	namespace = "kube-system"
+	name      = "inoculant"
+
+	// tokenTTLSeconds is how long the token written to the scoped
 	// kubeconfig is valid for.
-	bootstrapTokenTTLSeconds int64 = 3600
+	tokenTTLSeconds int64 = 3600
 )
 
 type policyRule struct{ group, resource string }
@@ -54,13 +55,15 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, gvks []schema.GroupVersion
 		return err
 	}
 
-	ttl := bootstrapTokenTTLSeconds
-	klog.InfoS("requesting service account token", "namespace", bootstrapNamespace, "name", bootstrapName, "ttlSeconds", ttl)
-	tokenResp, err := b.c.Clientset.CoreV1().ServiceAccounts(bootstrapNamespace).CreateToken(
+	ttl := tokenTTLSeconds
+	klog.InfoS("requesting service account token", "namespace", namespace, "name", name, "ttlSeconds", ttl)
+	tokenResp, err := b.c.Clientset.CoreV1().ServiceAccounts(namespace).CreateToken(
 		ctx,
-		bootstrapName,
+		name,
 		&authv1.TokenRequest{
-			Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl},
+			Spec: authv1.TokenRequestSpec{
+				ExpirationSeconds: &ttl,
+			},
 		},
 		metav1.CreateOptions{},
 	)
@@ -71,12 +74,12 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, gvks []schema.GroupVersion
 }
 
 func (b *Bootstrapper) applyServiceAccount(ctx context.Context) error {
-	cfg := corev1.ServiceAccount(bootstrapName, bootstrapNamespace)
+	cfg := corev1.ServiceAccount(name, namespace)
 
-	klog.InfoS("applying service account", "namespace", bootstrapNamespace, "name", bootstrapName)
+	klog.InfoS("applying service account", "namespace", namespace, "name", name)
 	_, err := b.c.Clientset.CoreV1().
-		ServiceAccounts(bootstrapNamespace).
-		Apply(ctx, cfg, client.ApplyOptions)
+		ServiceAccounts(namespace).
+		Apply(ctx, cfg, client.ApplyOptions())
 
 	return err
 }
@@ -87,10 +90,10 @@ func (b *Bootstrapper) applyClusterRole(ctx context.Context, gvks []schema.Group
 		return err
 	}
 
-	cfg := rbacv1.ClusterRole(bootstrapName).WithRules(rules...)
+	cfg := rbacv1.ClusterRole(name).WithRules(rules...)
 
-	klog.InfoS("applying cluster role", "name", bootstrapName, "rules", len(rules))
-	_, err = b.c.Clientset.RbacV1().ClusterRoles().Apply(ctx, cfg, client.ApplyOptions)
+	klog.InfoS("applying cluster role", "name", name, "rules", len(rules))
+	_, err = b.c.Clientset.RbacV1().ClusterRoles().Apply(ctx, cfg, client.ApplyOptions())
 
 	return err
 }
@@ -124,18 +127,18 @@ func (b *Bootstrapper) rbacRules(gvks []schema.GroupVersionKind) ([]*rbacv1.Poli
 }
 
 func (b *Bootstrapper) applyClusterRoleBinding(ctx context.Context) error {
-	cfg := rbacv1.ClusterRoleBinding(bootstrapName).
+	cfg := rbacv1.ClusterRoleBinding(name).
 		WithRoleRef(rbacv1.RoleRef().
 			WithAPIGroup("rbac.authorization.k8s.io").
 			WithKind("ClusterRole").
-			WithName(bootstrapName)).
+			WithName(name)).
 		WithSubjects(rbacv1.Subject().
 			WithKind("ServiceAccount").
-			WithName(bootstrapName).
-			WithNamespace(bootstrapNamespace))
+			WithName(name).
+			WithNamespace(namespace))
 
-	klog.InfoS("applying cluster role binding", "name", bootstrapName)
-	_, err := b.c.Clientset.RbacV1().ClusterRoleBindings().Apply(ctx, cfg, client.ApplyOptions)
+	klog.InfoS("applying cluster role binding", "name", name)
+	_, err := b.c.Clientset.RbacV1().ClusterRoleBindings().Apply(ctx, cfg, client.ApplyOptions())
 	return err
 }
 
@@ -151,16 +154,16 @@ func writeScopedKubeconfig(cfg *rest.Config, token, outputPath string) error {
 	}
 
 	kc := clientcmdapi.NewConfig()
-	kc.Clusters[bootstrapName] = &clientcmdapi.Cluster{
+	kc.Clusters[name] = &clientcmdapi.Cluster{
 		Server:                   cfg.Host,
 		CertificateAuthorityData: caData,
 	}
-	kc.AuthInfos[bootstrapName] = &clientcmdapi.AuthInfo{Token: token}
-	kc.Contexts[bootstrapName] = &clientcmdapi.Context{
-		Cluster:  bootstrapName,
-		AuthInfo: bootstrapName,
+	kc.AuthInfos[name] = &clientcmdapi.AuthInfo{Token: token}
+	kc.Contexts[name] = &clientcmdapi.Context{
+		Cluster:  name,
+		AuthInfo: name,
 	}
-	kc.CurrentContext = bootstrapName
+	kc.CurrentContext = name
 
 	if dir := filepath.Dir(outputPath); dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {

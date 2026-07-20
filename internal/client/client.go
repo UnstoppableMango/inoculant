@@ -15,9 +15,11 @@ import (
 
 // ApplyOptions is used for every server-side apply inoculant performs,
 // both for user manifests and bootstrap RBAC.
-var ApplyOptions = metav1.ApplyOptions{
-	FieldManager: "inoculant",
-	Force:        true, // TODO: confirm inoculant should always win field conflicts (currently unconditional)
+func ApplyOptions() metav1.ApplyOptions {
+	return metav1.ApplyOptions{
+		FieldManager: "inoculant",
+		Force:        true, // TODO: confirm inoculant should always win field conflicts (currently unconditional)
+	}
 }
 
 // Client holds the Kubernetes clients needed to apply manifests and
