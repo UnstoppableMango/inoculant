@@ -23,17 +23,30 @@ let
   top = config.services.kubernetes;
   cfg = top.inoculant;
 
-  # A real directory of copies, not symlinks: the pod bind-mounts this
-  # directory alone (not the wider Nix store), so entries must not point
-  # outside it.
+  # Real directory of copies, not symlinks, since the pod bind-mounts only this directory.
   manifestsDrv = pkgs.runCommand "inoculant-manifests" { } (
     ''
       mkdir -p "$out"
     ''
     + lib.concatStrings (
-      lib.mapAttrsToList (name: manifest: ''
-        install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/"${lib.escapeShellArg "${name}.json"}
-      '') cfg.manifests
+      lib.mapAttrsToList (
+        name: manifest:
+        let
+          # Keys become filenames under $out; a "/" would write into a subpath (or escape $out via "..").
+          checkedName = lib.throwIfNot (
+            !lib.hasInfix "/" name
+          ) "services.kubernetes.inoculant.manifests: key \"${name}\" must be a plain name, not a path" name;
+          # Multiple manifests under one name are written as consecutive JSON documents in one file; internal/manifest.Parse reads them as a stream.
+          content =
+            if lib.isList manifest then
+              lib.concatMapStringsSep "\n" builtins.toJSON manifest
+            else
+              builtins.toJSON manifest;
+        in
+        ''
+          install -Dm444 ${pkgs.writeText "${checkedName}.json" content} "$out/"${lib.escapeShellArg "${checkedName}.json"}
+        ''
+      ) cfg.manifests
     )
     + lib.concatMapStrings (src: ''
       cp -r --no-preserve=mode,ownership ${src} "$out/$(basename ${src})"
@@ -41,28 +54,35 @@ let
     '') cfg.manifestFiles
   );
 
-  # Derive allowed GVKs from cfg.manifests (attrset of Nix attrs).
-  # apiVersion can be "apps/v1" (group/version) or "v1" (core, empty group).
-  derivedGVKs = lib.mapAttrsToList (
-    name: manifest:
-    let
-      apiVersion = manifest.apiVersion or (throw "manifest missing apiVersion");
-      kind = manifest.kind or (throw "manifest missing kind");
-      parts = lib.splitString "/" apiVersion;
-      group = if lib.length parts == 2 then lib.head parts else "";
-      ver = lib.last parts;
-    in
-    if
-      (lib.length parts != 1 && lib.length parts != 2)
-      || ver == ""
-      || (lib.length parts == 2 && group == "")
-    then
-      throw "manifest ${name}: invalid apiVersion ${apiVersion}, want VERSION or GROUP/VERSION with non-empty parts"
-    else
-      {
-        inherit group ver kind;
-      }
-  ) cfg.manifests;
+  # Derive allowed GVKs from cfg.manifests, an attrset of manifest or list-of-manifest mirroring addonManager.addons.
+  derivedGVKs = lib.flatten (
+    lib.mapAttrsToList (
+      name: manifest:
+      let
+        items = if lib.isList manifest then manifest else [ manifest ];
+      in
+      map (
+        item:
+        let
+          apiVersion = item.apiVersion or (throw "manifest ${name}: missing apiVersion");
+          kind = item.kind or (throw "manifest ${name}: missing kind");
+          parts = lib.splitString "/" apiVersion;
+          group = if lib.length parts == 2 then lib.head parts else "";
+          ver = lib.last parts;
+        in
+        if
+          (lib.length parts != 1 && lib.length parts != 2)
+          || ver == ""
+          || (lib.length parts == 2 && group == "")
+        then
+          throw "manifest ${name}: invalid apiVersion ${apiVersion}, want VERSION or GROUP/VERSION with non-empty parts"
+        else
+          {
+            inherit group ver kind;
+          }
+      ) items
+    ) cfg.manifests
+  );
 
   allAllowedGVKs = lib.unique (derivedGVKs ++ cfg.additionalAllowedGVKs);
 
@@ -84,10 +104,7 @@ in
   options.services.kubernetes.inoculant = {
     enable = lib.mkEnableOption "A kubernetes bootstrapper";
 
-    # Built from this module's own `pkgs` arg, not the flake's already-built
-    # `inoculant` package: this module is exported as flake.nixosModules.default
-    # and must stay import-able by any NixOS config on any nixpkgs pin, so it
-    # can't reach into this flake's perSystem outputs.
+    # Built from this module's own `pkgs` arg rather than the flake's package, so the module stays import-able on any nixpkgs pin.
     pkg = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./inoculant.nix {
@@ -95,8 +112,7 @@ in
       };
     };
 
-    # Same self-containment reasoning as `pkg` above: rebuilt from `cfg.pkg`
-    # rather than reusing the flake's `container`/tarball packages.
+    # Same self-containment reasoning as `pkg` above: rebuilt from `cfg.pkg`.
     imageArchive = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./tarball.nix {
@@ -121,14 +137,11 @@ in
       description = "Host directory containing static manifests for inoculant to apply.";
     };
 
-    # Same shape as services.kubernetes.kubelet.manifests: attrset of nix
-    # attrs, rendered to "<name>.json" via builtins.toJSON. Keys become
-    # filenames (via manifestsDrv below), so they must be plain names (no
-    # "/" or other path-breaking characters).
+    # Same shape as services.kubernetes.addonManager.addons. Keys become filenames, so they must be plain names.
     manifests = lib.mkOption {
-      type = lib.types.attrsOf lib.types.attrs;
+      type = lib.types.attrsOf (lib.types.either lib.types.attrs (lib.types.listOf lib.types.attrs));
       default = { };
-      description = "Static manifests seeded into manifestsDirectory for inoculant to apply.";
+      description = "Static manifests seeded into manifestsDirectory for inoculant to apply. Each entry is either a single manifest or a list of manifests sharing one output file.";
     };
 
     manifestFiles = lib.mkOption {
@@ -137,9 +150,7 @@ in
       description = "Extra manifest files or directories copied into manifestsDirectory verbatim, alongside `manifests`.";
     };
 
-    # GVKs inoculant may apply that cannot be auto-derived at eval time
-    # (e.g. resources declared in YAML manifestFiles, which Nix cannot parse
-    # without IFD). Values are merged with GVKs auto-derived from `manifests`.
+    # GVKs that can't be auto-derived at eval time (e.g. from YAML manifestFiles), merged with the derived set.
     additionalAllowedGVKs = lib.mkOption {
       type = lib.types.listOf (
         lib.types.submodule {
@@ -169,13 +180,8 @@ in
     let
       image = "docker.io/library/inoculant:${version}";
 
-      # top.pki.clusterAdminKubeconfig is a private let-binding inside nixpkgs'
-      # pki.nix, not an exposed option, so we can't reach it here. Rebuild it
-      # the same way pki.nix does internally (and the way addonManager builds
-      # its own kubeconfig): mkKubeConfig + the clusterAdmin cert PKI already
-      # provisions.
-      # The bootstrap init container needs it to create RBAC resources;
-      # the main container uses only the scoped token written by the init container.
+      # top.pki.clusterAdminKubeconfig isn't an exposed option, so rebuild it the same way pki.nix does internally.
+      # Only the bootstrap init container uses this; the main container uses the scoped token it writes.
       kubeconfigFile = top.lib.mkKubeConfig "cluster-admin" {
         server = top.apiserverAddress;
         certFile = top.pki.certs.clusterAdmin.cert;
@@ -183,9 +189,7 @@ in
       };
     in
     {
-      # TODO: this reimports the archive on every kubelet restart (e.g. cert
-      # rotation), not just the first boot. Guard with an existence check.
-      # (nixpkgs' own seedDockerImages preStart has the same flaw.)
+      # TODO: this reimports the archive on every kubelet restart, not just the first boot.
       systemd.services.kubelet.preStart = lib.mkAfter ''
         ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
       '';

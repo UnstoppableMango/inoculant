@@ -5,9 +5,7 @@
   version,
 }:
 runCommand "inoculant.tar" { } ''
-  # --insecure-policy: source is a locally-built nix2container image
-  # (nix:${container}), not a remote registry, so there's no signature
-  # policy to verify against.
+  # --insecure-policy: source is a local nix2container image, not a remote registry.
   ${skopeo}/bin/skopeo copy \
     --insecure-policy \
     --tmpdir=$TMPDIR \

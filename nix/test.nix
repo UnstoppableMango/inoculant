@@ -16,9 +16,23 @@ testers.nixosTest {
             metadata.name = "inoculant-marker";
             data = { };
           };
+          # Exercises the either-attrs-or-list form: multiple manifests in one "pair.json" file.
+          pair = [
+            {
+              apiVersion = "v1";
+              kind = "ConfigMap";
+              metadata.name = "inoculant-pair-a";
+              data = { };
+            }
+            {
+              apiVersion = "v1";
+              kind = "ConfigMap";
+              metadata.name = "inoculant-pair-b";
+              data = { };
+            }
+          ];
         };
-        # Exercises manifestFiles' raw multi-document YAML support, distinct
-        # from the attrs-based `manifests` above.
+        # Exercises manifestFiles' raw multi-document YAML support.
         inoculant.manifestFiles = [
           (pkgs.writeText "extra-markers.yaml" ''
             apiVersion: v1
@@ -64,6 +78,14 @@ testers.nixosTest {
     machine.succeed("ctr --namespace k8s.io images list | grep inoculant")
     machine.wait_until_succeeds(
         "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-marker",
+        timeout=60,
+    )
+    machine.wait_until_succeeds(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-pair-a",
+        timeout=60,
+    )
+    machine.wait_until_succeeds(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-pair-b",
         timeout=60,
     )
     machine.succeed(
