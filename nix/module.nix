@@ -31,9 +31,23 @@ let
       mkdir -p "$out"
     ''
     + lib.concatStrings (
-      lib.mapAttrsToList (name: manifest: ''
-        install -Dm444 ${pkgs.writeText "${name}.json" (builtins.toJSON manifest)} "$out/"${lib.escapeShellArg "${name}.json"}
-      '') cfg.manifests
+      lib.mapAttrsToList (
+        name: manifest:
+        let
+          # Multiple manifests under one name are written as consecutive
+          # JSON documents in a single file; internal/manifest.Parse
+          # (k8s.io/apimachinery yaml.NewYAMLOrJSONDecoder) reads a stream
+          # of concatenated JSON values without needing a separator.
+          content =
+            if lib.isList manifest then
+              lib.concatMapStringsSep "\n" builtins.toJSON manifest
+            else
+              builtins.toJSON manifest;
+        in
+        ''
+          install -Dm444 ${pkgs.writeText "${name}.json" content} "$out/"${lib.escapeShellArg "${name}.json"}
+        ''
+      ) cfg.manifests
     )
     + lib.concatMapStrings (src: ''
       cp -r --no-preserve=mode,ownership ${src} "$out/$(basename ${src})"
@@ -41,28 +55,37 @@ let
     '') cfg.manifestFiles
   );
 
-  # Derive allowed GVKs from cfg.manifests (attrset of Nix attrs).
+  # Derive allowed GVKs from cfg.manifests (attrset of either a manifest or
+  # a list of manifests, mirroring services.kubernetes.addonManager.addons).
   # apiVersion can be "apps/v1" (group/version) or "v1" (core, empty group).
-  derivedGVKs = lib.mapAttrsToList (
-    name: manifest:
-    let
-      apiVersion = manifest.apiVersion or (throw "manifest missing apiVersion");
-      kind = manifest.kind or (throw "manifest missing kind");
-      parts = lib.splitString "/" apiVersion;
-      group = if lib.length parts == 2 then lib.head parts else "";
-      ver = lib.last parts;
-    in
-    if
-      (lib.length parts != 1 && lib.length parts != 2)
-      || ver == ""
-      || (lib.length parts == 2 && group == "")
-    then
-      throw "manifest ${name}: invalid apiVersion ${apiVersion}, want VERSION or GROUP/VERSION with non-empty parts"
-    else
-      {
-        inherit group ver kind;
-      }
-  ) cfg.manifests;
+  derivedGVKs = lib.flatten (
+    lib.mapAttrsToList (
+      name: manifest:
+      let
+        items = if lib.isList manifest then manifest else [ manifest ];
+      in
+      map (
+        item:
+        let
+          apiVersion = item.apiVersion or (throw "manifest ${name}: missing apiVersion");
+          kind = item.kind or (throw "manifest ${name}: missing kind");
+          parts = lib.splitString "/" apiVersion;
+          group = if lib.length parts == 2 then lib.head parts else "";
+          ver = lib.last parts;
+        in
+        if
+          (lib.length parts != 1 && lib.length parts != 2)
+          || ver == ""
+          || (lib.length parts == 2 && group == "")
+        then
+          throw "manifest ${name}: invalid apiVersion ${apiVersion}, want VERSION or GROUP/VERSION with non-empty parts"
+        else
+          {
+            inherit group ver kind;
+          }
+      ) items
+    ) cfg.manifests
+  );
 
   allAllowedGVKs = lib.unique (derivedGVKs ++ cfg.additionalAllowedGVKs);
 
@@ -121,14 +144,15 @@ in
       description = "Host directory containing static manifests for inoculant to apply.";
     };
 
-    # Same shape as services.kubernetes.kubelet.manifests: attrset of nix
-    # attrs, rendered to "<name>.json" via builtins.toJSON. Keys become
-    # filenames (via manifestsDrv below), so they must be plain names (no
-    # "/" or other path-breaking characters).
+    # Same shape as services.kubernetes.addonManager.addons: attrset of
+    # either a single manifest or a list of manifests, rendered to
+    # "<name>.json" via builtins.toJSON. Keys become filenames (via
+    # manifestsDrv below), so they must be plain names (no "/" or other
+    # path-breaking characters).
     manifests = lib.mkOption {
-      type = lib.types.attrsOf lib.types.attrs;
+      type = lib.types.attrsOf (lib.types.either lib.types.attrs (lib.types.listOf lib.types.attrs));
       default = { };
-      description = "Static manifests seeded into manifestsDirectory for inoculant to apply.";
+      description = "Static manifests seeded into manifestsDirectory for inoculant to apply. Each entry is either a single manifest or a list of manifests sharing one output file.";
     };
 
     manifestFiles = lib.mkOption {
