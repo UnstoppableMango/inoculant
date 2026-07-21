@@ -16,6 +16,10 @@ let
     skopeo-nix2container
     ;
 
+  inherit (inputs.gomod2nix.legacyPackages.${system})
+    buildGoApplication
+    ;
+
   top = config.services.kubernetes;
   cfg = top.inoculant;
 
@@ -87,7 +91,7 @@ in
     pkg = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./inoculant.nix {
-        inherit globset version;
+        inherit globset version buildGoApplication;
       };
     };
 
