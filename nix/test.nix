@@ -16,8 +16,7 @@ testers.nixosTest {
             metadata.name = "inoculant-marker";
             data = { };
           };
-          # Exercises the addonManager-style either-attrs-or-list form:
-          # multiple manifests written into one "pair.json" file.
+          # Exercises the either-attrs-or-list form: multiple manifests in one "pair.json" file.
           pair = [
             {
               apiVersion = "v1";
@@ -33,8 +32,7 @@ testers.nixosTest {
             }
           ];
         };
-        # Exercises manifestFiles' raw multi-document YAML support, distinct
-        # from the attrs-based `manifests` above.
+        # Exercises manifestFiles' raw multi-document YAML support.
         inoculant.manifestFiles = [
           (pkgs.writeText "extra-markers.yaml" ''
             apiVersion: v1
