@@ -80,11 +80,13 @@ testers.nixosTest {
         "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-marker",
         timeout=60,
     )
-    machine.succeed(
-        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-pair-a"
+    machine.wait_until_succeeds(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-pair-a",
+        timeout=60,
     )
-    machine.succeed(
-        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-pair-b"
+    machine.wait_until_succeeds(
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-pair-b",
+        timeout=60,
     )
     machine.succeed(
         "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-extra-marker-a"

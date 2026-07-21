@@ -32,6 +32,10 @@ let
       lib.mapAttrsToList (
         name: manifest:
         let
+          # Keys become filenames under $out; a "/" would write into a subpath (or escape $out via "..").
+          checkedName = lib.throwIfNot (
+            !lib.hasInfix "/" name
+          ) "services.kubernetes.inoculant.manifests: key \"${name}\" must be a plain name, not a path" name;
           # Multiple manifests under one name are written as consecutive JSON documents in one file; internal/manifest.Parse reads them as a stream.
           content =
             if lib.isList manifest then
@@ -40,7 +44,7 @@ let
               builtins.toJSON manifest;
         in
         ''
-          install -Dm444 ${pkgs.writeText "${name}.json" content} "$out/"${lib.escapeShellArg "${name}.json"}
+          install -Dm444 ${pkgs.writeText "${checkedName}.json" content} "$out/"${lib.escapeShellArg "${checkedName}.json"}
         ''
       ) cfg.manifests
     )
