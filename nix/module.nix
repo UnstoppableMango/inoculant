@@ -133,7 +133,7 @@ in
       description = "Host directory containing static manifests for inoculant to apply.";
     };
 
-    # Same shape as services.kubernetes.addonManager.addons. Keys become filenames, so must be plain names.
+    # Same shape as services.kubernetes.addonManager.addons. Keys become filenames, so they must be plain names.
     manifests = lib.mkOption {
       type = lib.types.attrsOf (lib.types.either lib.types.attrs (lib.types.listOf lib.types.attrs));
       default = { };
@@ -185,7 +185,7 @@ in
       };
     in
     {
-      # TODO: reimports the archive on every kubelet restart, not just first boot.
+      # TODO: this reimports the archive on every kubelet restart, not just the first boot.
       systemd.services.kubelet.preStart = lib.mkAfter ''
         ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
       '';
