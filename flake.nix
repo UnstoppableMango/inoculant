@@ -1,6 +1,10 @@
 {
   description = "A kubernetes bootstrapper";
 
+  nixConfig = {
+    allow-import-from-derivation = false;
+  };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     systems.url = "github:nix-systems/triplet";
