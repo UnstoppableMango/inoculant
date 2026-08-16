@@ -208,7 +208,20 @@ in
 
   config = lib.mkIf cfg.enable (
     let
-      image = "docker.io/library/inoculant:${version}";
+      # Content-address the image reference so a rebuilt binary (even at the same
+      # `version`) yields a new reference. The `image:` field is part of the static
+      # pod manifest, so a changed reference makes kubelet tear down and recreate
+      # the pod, re-running bootstrap + apply. It also guarantees the freshly built
+      # image is the one imported/served rather than a stale same-tag image, since
+      # `ctr images import --index-name` below names the image by this reference.
+      imageHash = builtins.substring 0 16 (builtins.hashString "sha256" "${cfg.imageArchive}");
+      image = "docker.io/library/inoculant:${version}-${imageHash}";
+
+      # Content hash of the applied manifest set. Embedded as a pod annotation so
+      # that editing any manifest changes the static pod manifest, causing kubelet
+      # to recreate the pod and re-run apply. manifestsDrv's store path already
+      # incorporates the content of every manifest.
+      manifestsHash = builtins.hashString "sha256" "${manifestsDrv}";
 
       # top.pki.clusterAdminKubeconfig isn't an exposed option, so rebuild it the same way pki.nix does internally.
       # Only the bootstrap init container uses this; the main container uses the scoped token it writes.
@@ -234,6 +247,12 @@ in
         metadata = {
           name = "inoculant";
           namespace = "kube-system";
+          # Re-apply trigger: kubelet derives a static pod's identity from a hash
+          # of its manifest file, so any change here recreates the pod. This
+          # annotation changes whenever the manifest set changes, propagating
+          # manifest edits on the next `nixos-rebuild switch`. Image changes are
+          # propagated separately via the content-addressed `image` reference.
+          annotations."inoculant.unmango.dev/manifests-hash" = manifestsHash;
         };
         spec = {
           restartPolicy = "OnFailure";

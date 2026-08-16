@@ -94,5 +94,23 @@ testers.nixosTest {
     machine.succeed(
         "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig get configmap inoculant-extra-marker-b"
     )
+
+    # Re-apply wiring: the static pod must carry the manifests-hash annotation
+    # (manifest-change trigger) and a content-addressed image reference
+    # (binary-change trigger). A change to either makes kubelet recreate the pod
+    # and re-run bootstrap + apply on the next `nixos-rebuild switch`.
+    # The static pod's mirror pod is named inoculant-<node>; exclude the unrelated
+    # inoculant-seed-test workload pod.
+    machine.wait_until_succeeds(
+        "set -e; "
+        "pod=$(kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig -n kube-system "
+        "get pods -o name | grep -E '^pod/inoculant-' | grep -v inoculant-seed-test | head -1); "
+        "test -n \"$pod\"; "
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig -n kube-system "
+        "get \"$pod\" -o jsonpath='{.metadata.annotations}' | grep manifests-hash; "
+        "kubectl --kubeconfig=/etc/kubernetes/cluster-admin.kubeconfig -n kube-system "
+        "get \"$pod\" -o jsonpath='{.spec.containers[0].image}' | grep -E 'inoculant:.+-[0-9a-f]{16}$'",
+        timeout=90,
+    )
   '';
 }
