@@ -174,6 +174,36 @@ in
       default = [ ];
       description = "Extra GVKs inoculant is permitted to apply, beyond those auto-derived from `manifests`. This is the only way to grant permissions for resources coming from `manifestFiles`, since Nix cannot introspect those files' contents at eval time.";
     };
+
+    clusterAdmin = lib.mkOption {
+      description = ''
+        Client certificate with cluster-admin privileges, used by the bootstrap
+        init container to mint scoped RBAC and a token kubeconfig.
+
+        Defaults to the standard easyCerts-managed clusterAdmin cert. Set this
+        explicitly on setups that don't populate `pki.certs.clusterAdmin` (e.g.
+        `easyCerts = false`): that option is also unconditionally defined by
+        `services.kubernetes.apiserver` whenever it's enabled, and since
+        `pki.certs` merges same-priority definitions with a plain `//`, a
+        second definition of the same key doesn't reliably win against it.
+      '';
+      default = {
+        inherit (top.pki.certs.clusterAdmin) cert key;
+      };
+      defaultText = lib.literalExpression "config.services.kubernetes.pki.certs.clusterAdmin";
+      type = lib.types.submodule {
+        options = {
+          cert = lib.mkOption {
+            type = lib.types.path;
+            description = "Path to the client certificate.";
+          };
+          key = lib.mkOption {
+            type = lib.types.path;
+            description = "Path to the private key matching `cert`.";
+          };
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable (
@@ -184,8 +214,8 @@ in
       # Only the bootstrap init container uses this; the main container uses the scoped token it writes.
       kubeconfigFile = top.lib.mkKubeConfig "cluster-admin" {
         server = top.apiserverAddress;
-        certFile = top.pki.certs.clusterAdmin.cert;
-        keyFile = top.pki.certs.clusterAdmin.key;
+        certFile = cfg.clusterAdmin.cert;
+        keyFile = cfg.clusterAdmin.key;
       };
     in
     {
@@ -236,12 +266,12 @@ in
                 }
                 {
                   name = "client-cert";
-                  mountPath = top.pki.certs.clusterAdmin.cert;
+                  mountPath = cfg.clusterAdmin.cert;
                   readOnly = true;
                 }
                 {
                   name = "client-key";
-                  mountPath = top.pki.certs.clusterAdmin.key;
+                  mountPath = cfg.clusterAdmin.key;
                   readOnly = true;
                 }
                 {
@@ -289,11 +319,11 @@ in
             }
             {
               name = "client-cert";
-              hostPath.path = top.pki.certs.clusterAdmin.cert;
+              hostPath.path = cfg.clusterAdmin.cert;
             }
             {
               name = "client-key";
-              hostPath.path = top.pki.certs.clusterAdmin.key;
+              hostPath.path = cfg.clusterAdmin.key;
             }
             {
               name = "scoped-kubeconfig";
