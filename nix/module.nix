@@ -253,9 +253,14 @@ in
       };
     in
     {
-      # TODO: this reimports the archive on every kubelet restart, not just the first boot.
+      # image is content-addressed (see imageHash above), so an existing image
+      # under this exact tag is guaranteed to already be the right content.
+      # Skip the import on kubelet restarts where nothing changed; only a
+      # rebuilt binary (new imageHash, new tag) triggers a real import.
       systemd.services.kubelet.preStart = lib.mkAfter ''
-        ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
+        if ! ${pkgs.containerd}/bin/ctr -n k8s.io images ls -q "name==${image}" | grep -q .; then
+          ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
+        fi
       '';
 
       # Populate manifestsDirectory via environment.etc when possible, rather than
