@@ -237,9 +237,27 @@ in
         ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
       '';
 
-      systemd.tmpfiles.rules = [
+      # Populate manifestsDirectory via environment.etc when possible, rather than
+      # systemd.tmpfiles.rules. environment.etc entries (including the static pod
+      # manifest below) are written by system.activationScripts.etc, which
+      # switch-to-configuration runs synchronously and first. systemd.tmpfiles
+      # rules are only applied later, when sysinit-reactivation.target is
+      # restarted, strictly after that activation script (and the new
+      # manifests-hash annotation it writes) is already visible to kubelet. That
+      # ordering is backwards for re-apply: kubelet could recreate the pod before
+      # the manifestsDirectory symlink flips to the new content, re-applying
+      # stale manifests. Landing both writes in the same activation phase closes
+      # that window.
+      environment.etc = lib.optionalAttrs (lib.hasPrefix "/etc/" cfg.manifestsDirectory) {
+        ${lib.removePrefix "/etc/" cfg.manifestsDirectory}.source = manifestsDrv;
+      };
+
+      # Fallback for manifestsDirectory outside /etc, where environment.etc can't
+      # reach. Still carries the ordering caveat above: prefer the default
+      # /etc-rooted path to avoid it.
+      systemd.tmpfiles.rules = lib.optional (!lib.hasPrefix "/etc/" cfg.manifestsDirectory) (
         "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
-      ];
+      );
 
       services.kubernetes.kubelet.manifests.inoculant = {
         apiVersion = "v1";

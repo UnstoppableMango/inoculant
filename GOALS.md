@@ -89,6 +89,14 @@ run.
 Workflow: edit manifests (or rebuild inoculant) → `nixos-rebuild switch` →
 kubelet recreates the inoculant static pod → manifests are re-applied.
 
+> This ordering guarantee holds only while `manifestsDirectory` stays under
+> `/etc` (the default). The module writes that path via `environment.etc`, the
+> same activation phase that writes the static pod manifest, so both land
+> together. A `manifestsDirectory` outside `/etc` falls back to
+> `systemd.tmpfiles.rules`, which is applied in a later activation phase, after
+> kubelet can already see the new pod manifest, so a recreated pod could
+> briefly re-apply stale content.
+
 > Pruning resources removed from the manifest set is **not** handled yet. A
 > removed manifest leaves its object in the cluster. Apply-set pruning
 > (`kubectl apply --prune`-style) is a planned follow-up; it stays within
