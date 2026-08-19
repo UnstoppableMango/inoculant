@@ -30,7 +30,7 @@ apply.go             # package inoculant: Apply(ctx, dir, restConfig) — thin w
 bootstrap.go         # package inoculant: Bootstrap(ctx, restConfig, gvks, output) — thin wrapper over internal/bootstrap
 internal/
   client/            # dynamic client + RESTMapper construction
-  apply/              # walks dir, server-side applies YAML/JSON manifests
+  apply/              # walks dir, server-side applies YAML/JSON manifests, prunes removed ones
   bootstrap/          # creates scoped RBAC (SA/ClusterRole/ClusterRoleBinding) limited to allowed GVKs, writes a token-scoped kubeconfig; runs as an init container
   manifest/           # manifest parsing (YAML/JSON → unstructured)
 tests/
@@ -76,4 +76,4 @@ See GOALS.md for full rationale.
 
 ## Roadmap (from GOALS.md)
 
-v1: raw manifest directories (YAML/JSON) + scoped bootstrap RBAC. Post-v1: Helm (OCI), Kustomize, apply-set pruning. Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.
+v1: raw manifest directories (YAML/JSON) + scoped bootstrap RBAC + apply-set pruning. Post-v1: Helm (OCI), Kustomize. Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.

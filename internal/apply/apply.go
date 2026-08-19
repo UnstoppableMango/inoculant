@@ -21,6 +21,20 @@ import (
 	"github.com/unstoppablemango/inoculant/internal/manifest"
 )
 
+// managedByLabel marks every object inoculant applies, so a prune pass can
+// find candidates for deletion without needing separate tracking state.
+const (
+	managedByLabel = "inoculant.unmango.dev/managed-by"
+	managedByValue = "inoculant"
+)
+
+// objectKey identifies a live cluster object for desired/actual set diffing.
+type objectKey struct {
+	schema.GroupVersionResource
+	Namespace string
+	Name      string
+}
+
 // Applier server-side applies manifest directories using c.
 type Applier struct {
 	c *client.Client
@@ -31,7 +45,8 @@ func New(c *client.Client) *Applier {
 	return &Applier{c: c}
 }
 
-// Apply walks dir and server-side applies each YAML/JSON manifest it finds.
+// Apply walks dir and server-side applies each YAML/JSON manifest it finds,
+// then prunes any previously-applied object no longer present in dir.
 func (a *Applier) Apply(ctx context.Context, dir string) error {
 	resolved, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -40,7 +55,8 @@ func (a *Applier) Apply(ctx context.Context, dir string) error {
 
 	klog.InfoS("applying manifests", "dir", resolved)
 
-	return filepath.WalkDir(resolved, func(path string, d fs.DirEntry, err error) error {
+	desired := map[objectKey]struct{}{}
+	if err := filepath.WalkDir(resolved, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -51,15 +67,19 @@ func (a *Applier) Apply(ctx context.Context, dir string) error {
 		ext := strings.ToLower(filepath.Ext(path))
 		switch ext {
 		case ".yaml", ".yml", ".json":
-			return a.applyFile(ctx, path)
+			return a.applyFile(ctx, path, desired)
 		default:
 			klog.V(1).InfoS("skipping non-manifest file", "path", path)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	return a.prune(ctx, desired)
 }
 
-func (a *Applier) applyFile(ctx context.Context, path string) error {
+func (a *Applier) applyFile(ctx context.Context, path string, desired map[objectKey]struct{}) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
@@ -71,14 +91,14 @@ func (a *Applier) applyFile(ctx context.Context, path string) error {
 	}
 
 	for _, obj := range objs {
-		if err := a.applyObject(ctx, obj); err != nil {
+		if err := a.applyObject(ctx, obj, desired); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (a *Applier) applyObject(ctx context.Context, obj *unstructured.Unstructured) error {
+func (a *Applier) applyObject(ctx context.Context, obj *unstructured.Unstructured, desired map[objectKey]struct{}) error {
 	gvk := obj.GroupVersionKind()
 	mapping, err := a.c.Mapper.RESTMapping(
 		schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind},
@@ -100,10 +120,19 @@ func (a *Applier) applyObject(ctx context.Context, obj *unstructured.Unstructure
 		ri = a.c.Dynamic.Resource(mapping.Resource)
 	}
 
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labels[managedByLabel] = managedByValue
+	obj.SetLabels(labels)
+
 	klog.InfoS("applying object", "kind", gvk.Kind, "namespace", ns, "name", obj.GetName())
 
 	if _, err := ri.Apply(ctx, obj.GetName(), obj, client.ApplyOptions()); err != nil {
 		return fmt.Errorf("apply %s %s/%s: %w", gvk.Kind, ns, obj.GetName(), err)
 	}
+
+	desired[objectKey{GroupVersionResource: mapping.Resource, Namespace: ns, Name: obj.GetName()}] = struct{}{}
 	return nil
 }
