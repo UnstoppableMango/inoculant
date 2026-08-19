@@ -6,7 +6,7 @@ build:
 container: bin/inoculant.tar
 
 test:
-	ginkgo run -r
+	go tool ginkgo run -r
 
 update:
 	nix flake update
