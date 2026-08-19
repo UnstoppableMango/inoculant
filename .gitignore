@@ -2,7 +2,8 @@
 .envrc
 .direnv/
 bin/
-.claude/
+.claude/*
+!.claude/skills/
 *.test
 .vscode/*
 !.vscode/extensions.json
