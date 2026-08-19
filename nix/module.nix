@@ -84,7 +84,15 @@ let
     ) cfg.manifests
   );
 
-  allAllowedGVKs = lib.unique (derivedGVKs ++ cfg.additionalAllowedGVKs);
+  allAllowedGVKs = lib.unique (
+    derivedGVKs
+    ++ cfg.additionalAllowedGVKs
+    ++ lib.optional (cfg.nodeLabels != { }) {
+      group = "";
+      ver = "v1";
+      kind = "Node";
+    }
+  );
 
   # --allow GROUP/VERSION/KIND args for the bootstrap init container.
   # Empty group uses the empty string (core API).
@@ -99,6 +107,14 @@ let
       "${group}/${ver}/${kind}"
     ]
   ) allAllowedGVKs;
+
+  # --label key=value args for the label-node init container.
+  labelArgs = lib.concatLists (
+    lib.mapAttrsToList (name: value: [
+      "--label"
+      "${name}=${value}"
+    ]) cfg.nodeLabels
+  );
 in
 {
   options.services.kubernetes.inoculant = {
@@ -172,6 +188,12 @@ in
       );
       default = [ ];
       description = "Extra GVKs inoculant is permitted to apply, beyond those auto-derived from `manifests`. This is the only way to grant permissions for resources coming from `manifestFiles`, since Nix cannot introspect those files' contents at eval time.";
+    };
+
+    nodeLabels = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = "Labels to apply to this node via a `label-node` init container, filling the gap left by kubelet's deprecated --node-labels.";
     };
 
     clusterAdmin = lib.mkOption {
@@ -318,7 +340,7 @@ in
             }
           ];
 
-          # Phase 2: apply manifests using the scoped token kubeconfig.
+          # Phase 2: apply manifests / label the node using the scoped token kubeconfig.
           containers = [
             {
               name = "inoculant";
@@ -342,7 +364,30 @@ in
                 }
               ];
             }
-          ];
+          ]
+          ++ lib.optional (cfg.nodeLabels != { }) {
+            name = "inoculant-label-node";
+            image = image;
+            env = [
+              {
+                name = "NODE_NAME";
+                valueFrom.fieldRef.fieldPath = "spec.nodeName";
+              }
+            ];
+            args = [
+              "--kubeconfig"
+              "/scoped-kubeconfig/kubeconfig"
+              "label-node"
+            ]
+            ++ labelArgs;
+            volumeMounts = [
+              {
+                name = "scoped-kubeconfig";
+                mountPath = "/scoped-kubeconfig";
+                readOnly = true;
+              }
+            ];
+          };
 
           volumes = [
             {
