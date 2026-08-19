@@ -25,11 +25,18 @@ Dev shell: `nix develop` (provides Go, gopls, ginkgo, gomod2nix, formatters)
 ## Architecture
 
 ```
-cmd/inoculant/    # cobra CLI entry point
-apply.go          # core: Apply(ctx, dir, restConfig) — walks dir, server-side applies YAML/JSON via dynamic client
+cmd/inoculant/       # cobra CLI: main.go (root cmd, --kubeconfig), apply.go, bootstrap.go (subcommands)
+apply.go             # package inoculant: Apply(ctx, dir, restConfig) — thin wrapper over internal/apply
+bootstrap.go         # package inoculant: Bootstrap(ctx, restConfig, gvks, output) — thin wrapper over internal/bootstrap
+internal/
+  client/            # dynamic client + RESTMapper construction
+  apply/              # walks dir, server-side applies YAML/JSON manifests
+  bootstrap/          # creates scoped RBAC (SA/ClusterRole/ClusterRoleBinding) limited to allowed GVKs, writes a token-scoped kubeconfig; runs as an init container
+  manifest/           # manifest parsing (YAML/JSON → unstructured)
 tests/
   suite_test.go   # envtest bootstrap (controller-runtime etcd + apiserver)
   apply_test.go   # Ginkgo BDD tests against live envtest cluster
+  bootstrap_test.go  # Ginkgo BDD tests for bootstrap/RBAC flow
 nix/
   default.nix     # wires inoculant + container + test packages
   inoculant.nix   # buildGoApplication (static binary)
@@ -55,6 +62,18 @@ flake.nix         # dev shell, treefmt, exports flake.nixosModules.default; Linu
 - `github.com/spf13/cobra` — CLI
 - `github.com/onsi/ginkgo/v2` + `gomega` — test framework
 
+## Re-apply mechanism (NixOS module)
+
+Inoculant is one-shot but runs as a kubelet static pod, so `nixos-rebuild switch` re-triggers it without a watcher: kubelet derives a static pod's identity from a hash of its manifest file, and the module changes that manifest whenever inputs change.
+
+- Editing manifests changes the `inoculant.unmango.dev/manifests-hash` pod annotation (hash of the seeded manifest set) → kubelet recreates the pod.
+- Rebuilding inoculant changes the content-addressed image ref (`inoculant:<version>-<imageHash>`) → same effect, and ensures the freshly built image (not a stale same-tag one) is what's seeded into containerd.
+- Both containers use server-side apply / idempotent RBAC creation, so re-runs are no-ops except for actual drift.
+- Guarantee only holds while `manifestsDirectory` stays under `/etc` (written via `environment.etc`, same activation phase as the pod manifest); outside `/etc` it falls back to `systemd.tmpfiles.rules`, applied later, so a recreated pod could briefly re-apply stale content.
+- Pruning of removed manifests is not implemented yet.
+
+See GOALS.md for full rationale.
+
 ## Roadmap (from GOALS.md)
 
-v1: raw manifest directories (YAML/JSON). Post-v1: Helm (OCI), Kustomize. Non-goals: multi-cluster, secret management, dependency ordering.
+v1: raw manifest directories (YAML/JSON) + scoped bootstrap RBAC. Post-v1: Helm (OCI), Kustomize, apply-set pruning. Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.
