@@ -102,10 +102,6 @@
               ]
               ++ lib.optionals pkgs.stdenv.isLinux [ containerd ];
 
-            GO = "${pkgs.go}/bin/go";
-            GOMOD2NIX = "${pkgs.gomod2nix}/bin/gomod2nix";
-            GINKGO = "${pkgs.ginkgo}/bin/ginkgo";
-
             # https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
             TEST_ASSET_ETCD = "${pkgs.etcd}/bin/etcd";
             TEST_ASSET_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
