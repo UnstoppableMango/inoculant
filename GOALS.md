@@ -97,17 +97,26 @@ kubelet recreates the inoculant static pod → manifests are re-applied.
 > kubelet can already see the new pod manifest, so a recreated pod could
 > briefly re-apply stale content.
 
-> Pruning resources removed from the manifest set is **not** handled yet. A
-> removed manifest leaves its object in the cluster. Apply-set pruning
-> (`kubectl apply --prune`-style) is a planned follow-up; it stays within
-> one-shot semantics (prune-on-apply, not continuous reconciliation) and so does
-> not conflict with the drift-detection non-goal below.
+> Pruning is implemented. Every object inoculant applies is labeled
+> `inoculant.unmango.dev/managed-by: inoculant`. After applying the current
+> manifest set, `Apply` discovers all API resource types the cluster
+> exposes, lists each by that label, and deletes anything not in the
+> current desired set. This stays within one-shot semantics (prune-on-apply,
+> not continuous reconciliation) and so does not conflict with the
+> drift-detection non-goal below.
+>
+> Limitation: the bootstrap init container mints a token scoped only to the
+> GVKs derived from the *current* manifest set (see "Re-apply on change"
+> below). If every manifest of a given Kind is removed at once, the token
+> has no RBAC left to discover or delete the orphaned objects of that Kind,
+> and pruning silently skips them (logged, not fatal). Objects of a Kind
+> still used elsewhere in the manifest set are pruned normally. Closing this
+> gap means granting broader/previous-generation RBAC (e.g. via
+> `additionalAllowedGVKs`) and is left as a follow-up.
 
 ## Non-Goals (v1)
 
 - Ongoing reconciliation / drift detection (use Flux, ArgoCD, etc.)
-- Pruning orphaned resources on re-apply (planned follow-up; see "Re-apply on
-  change")
 - Secret management or decryption (use agenix, sops-nix, or external-secrets)
 - Multi-cluster management
 - Dependency ordering between resources
