@@ -117,7 +117,6 @@ in
       type = lib.types.package;
       default = pkgs.callPackage ./tarball.nix {
         inherit (cfg) skopeo;
-        inherit version;
 
         container = pkgs.callPackage ./container.nix {
           inoculant = cfg.pkg;
