@@ -117,7 +117,6 @@ in
       type = lib.types.package;
       default = pkgs.callPackage ./tarball.nix {
         inherit (cfg) skopeo;
-        inherit version;
 
         container = pkgs.callPackage ./container.nix {
           inoculant = cfg.pkg;
@@ -208,7 +207,20 @@ in
 
   config = lib.mkIf cfg.enable (
     let
-      image = "docker.io/library/inoculant:${version}";
+      # Content-address the image reference so a rebuilt binary (even at the same
+      # `version`) yields a new reference. The `image:` field is part of the static
+      # pod manifest, so a changed reference makes kubelet tear down and recreate
+      # the pod, re-running bootstrap + apply. It also guarantees the freshly built
+      # image is the one imported/served rather than a stale same-tag image, since
+      # `ctr images import --index-name` below names the image by this reference.
+      imageHash = builtins.substring 0 16 (builtins.hashString "sha256" "${cfg.imageArchive}");
+      image = "docker.io/library/inoculant:${version}-${imageHash}";
+
+      # Content hash of the applied manifest set. Embedded as a pod annotation so
+      # that editing any manifest changes the static pod manifest, causing kubelet
+      # to recreate the pod and re-run apply. manifestsDrv's store path already
+      # incorporates the content of every manifest.
+      manifestsHash = builtins.hashString "sha256" "${manifestsDrv}";
 
       # top.pki.clusterAdminKubeconfig isn't an exposed option, so rebuild it the same way pki.nix does internally.
       # Only the bootstrap init container uses this; the main container uses the scoped token it writes.
@@ -224,9 +236,27 @@ in
         ${pkgs.containerd}/bin/ctr -n k8s.io images import --index-name ${image} ${cfg.imageArchive}
       '';
 
-      systemd.tmpfiles.rules = [
+      # Populate manifestsDirectory via environment.etc when possible, rather than
+      # systemd.tmpfiles.rules. environment.etc entries (including the static pod
+      # manifest below) are written by system.activationScripts.etc, which
+      # switch-to-configuration runs synchronously and first. systemd.tmpfiles
+      # rules are only applied later, when sysinit-reactivation.target is
+      # restarted, strictly after that activation script (and the new
+      # manifests-hash annotation it writes) is already visible to kubelet. That
+      # ordering is backwards for re-apply: kubelet could recreate the pod before
+      # the manifestsDirectory symlink flips to the new content, re-applying
+      # stale manifests. Landing both writes in the same activation phase closes
+      # that window.
+      environment.etc = lib.optionalAttrs (lib.hasPrefix "/etc/" cfg.manifestsDirectory) {
+        ${lib.removePrefix "/etc/" cfg.manifestsDirectory}.source = manifestsDrv;
+      };
+
+      # Fallback for manifestsDirectory outside /etc, where environment.etc can't
+      # reach. Still carries the ordering caveat above: prefer the default
+      # /etc-rooted path to avoid it.
+      systemd.tmpfiles.rules = lib.optional (!lib.hasPrefix "/etc/" cfg.manifestsDirectory) (
         "L+ ${cfg.manifestsDirectory} - - - - ${manifestsDrv}"
-      ];
+      );
 
       services.kubernetes.kubelet.manifests.inoculant = {
         apiVersion = "v1";
@@ -234,6 +264,12 @@ in
         metadata = {
           name = "inoculant";
           namespace = "kube-system";
+          # Re-apply trigger: kubelet derives a static pod's identity from a hash
+          # of its manifest file, so any change here recreates the pod. This
+          # annotation changes whenever the manifest set changes, propagating
+          # manifest edits on the next `nixos-rebuild switch`. Image changes are
+          # propagated separately via the content-addressed `image` reference.
+          annotations."inoculant.unmango.dev/manifests-hash" = manifestsHash;
         };
         spec = {
           restartPolicy = "OnFailure";

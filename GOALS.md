@@ -60,9 +60,54 @@ is fully up, mounting host paths for kubeconfig and resource directories.
 Operate alongside kubelet's static pod mechanism. Do not conflict with
 resources already managed via static pod manifests.
 
+### 8. Re-apply on change
+
+Inoculant is one-shot, but changes to managed inputs must still reach the
+cluster.
+Inoculant runs as a kubelet static pod, and kubelet derives a static pod's
+identity from a hash of its manifest file: any change to that manifest
+recreates the pod, which re-runs bootstrap + apply.
+The NixOS module exploits this so that a `nixos-rebuild switch` propagates
+changes without any long-running watcher or reconciler.
+
+- **Manifest changes.** The module hashes the seeded manifest set and embeds the
+  hash as the `inoculant.unmango.dev/manifests-hash` pod annotation. Editing any
+  manifest changes the hash, changes the static pod manifest, and kubelet
+  recreates the pod.
+- **Inoculant changes.** The module content-addresses the image reference
+  (`inoculant:<version>-<imageHash>`). A rebuilt binary yields a new reference,
+  which both changes the static pod manifest (triggering recreation) and ensures
+  the freshly built image is the one imported into containerd and served, rather
+  than a stale same-tag image.
+
+Re-apply is safe because it is idempotent: the main container uses server-side
+apply (field manager `inoculant`), so re-applying unchanged manifests is a
+no-op and changed fields are updated in place. The bootstrap init container
+likewise re-applies idempotent RBAC and mints a fresh short-lived token each
+run.
+
+Workflow: edit manifests (or rebuild inoculant) → `nixos-rebuild switch` →
+kubelet recreates the inoculant static pod → manifests are re-applied.
+
+> This ordering guarantee holds only while `manifestsDirectory` stays under
+> `/etc` (the default). The module writes that path via `environment.etc`, the
+> same activation phase that writes the static pod manifest, so both land
+> together. A `manifestsDirectory` outside `/etc` falls back to
+> `systemd.tmpfiles.rules`, which is applied in a later activation phase, after
+> kubelet can already see the new pod manifest, so a recreated pod could
+> briefly re-apply stale content.
+
+> Pruning resources removed from the manifest set is **not** handled yet. A
+> removed manifest leaves its object in the cluster. Apply-set pruning
+> (`kubectl apply --prune`-style) is a planned follow-up; it stays within
+> one-shot semantics (prune-on-apply, not continuous reconciliation) and so does
+> not conflict with the drift-detection non-goal below.
+
 ## Non-Goals (v1)
 
 - Ongoing reconciliation / drift detection (use Flux, ArgoCD, etc.)
+- Pruning orphaned resources on re-apply (planned follow-up; see "Re-apply on
+  change")
 - Secret management or decryption (use agenix, sops-nix, or external-secrets)
 - Multi-cluster management
 - Dependency ordering between resources
