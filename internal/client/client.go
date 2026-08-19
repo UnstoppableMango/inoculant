@@ -15,10 +15,16 @@ import (
 
 // ApplyOptions is used for every server-side apply inoculant performs,
 // both for user manifests and bootstrap RBAC.
+//
+// Force is intentionally left unset (false). Every apply uses the same
+// "inoculant" field manager, so re-applying inoculant's own manifests never
+// conflicts with itself, even across repeated re-apply cycles. Leaving Force
+// off means a field genuinely owned by a different manager (e.g. a resource
+// adopted from kubectl or hand-edited by an operator) causes a conflict
+// error instead of being silently overwritten.
 func ApplyOptions() metav1.ApplyOptions {
 	return metav1.ApplyOptions{
 		FieldManager: "inoculant",
-		Force:        true, // TODO: confirm inoculant should always win field conflicts (currently unconditional)
 	}
 }
 
