@@ -1,8 +1,3 @@
-GO        ?= go
-GOMOD2NIX ?= gomod2nix
-GINKGO    ?= ginkgo
-
-GO_SRC ?= $(shell find . -name '*.go')
 NIX_SRC ?= $(shell find . -name '*.nix')
 
 build:
@@ -11,7 +6,7 @@ build:
 container: bin/inoculant.tar
 
 test:
-	$(GINKGO) run -r
+	go tool ginkgo run -r
 
 update:
 	nix flake update
@@ -34,7 +29,7 @@ bin/manifest.json: ${GO_SRC} ${NIX_SRC} | bin
 	nix build .#container --out-link $@
 
 go.sum: go.mod ${GO_SRC}
-	$(GO) mod tidy
+	go mod tidy
 
 nix/gomod2nix.toml: go.sum
-	$(GOMOD2NIX) generate --dir ${CURDIR} --outdir ${@D}
+	gomod2nix generate --dir ${CURDIR} --outdir ${@D}
