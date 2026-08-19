@@ -1,3 +1,4 @@
+GO_SRC ?= $(shell find . -name '*.go')
 NIX_SRC ?= $(shell find . -name '*.nix')
 
 build:
