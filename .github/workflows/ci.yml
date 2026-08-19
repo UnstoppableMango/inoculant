@@ -8,7 +8,16 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - system: x86_64-linux
+            os: ubuntu-latest
+          - system: aarch64-linux
+            os: ubuntu-24.04-arm
+          - system: aarch64-darwin
+            os: macos-14
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -27,8 +36,15 @@ jobs:
       - run: nix build .#
 
   integration-test:
-    runs-on: ubuntu-latest
     needs: build
+    strategy:
+      matrix:
+        include:
+          - system: x86_64-linux
+            os: ubuntu-latest
+          - system: aarch64-linux
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -46,11 +62,20 @@ jobs:
       - run: nix develop -c make test
 
   container:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs: build
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - system: x86_64-linux
+            os: ubuntu-latest
+            arch: amd64
+          - system: aarch64-linux
+            os: ubuntu-24.04-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -72,6 +97,8 @@ jobs:
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ghcr.io/unstoppablemango/inoculant
+          flavor: |
+            suffix=-${{ matrix.arch }},onlatest=true
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -91,8 +118,47 @@ jobs:
             --username unstoppablemango \
             --password-stdin <<< "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Push container
+      - name: Push arch image
         run: |
           while IFS= read -r tag; do
             nix run .#container.copyTo -- "docker://$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+  container-manifest:
+    runs-on: ubuntu-latest
+    needs: container
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            allow-import-from-derivation = false
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ghcr.io/unstoppablemango/inoculant
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - run: |
+          nix shell nixpkgs#regclient -c regctl registry login ghcr.io \
+            -u unstoppablemango --pass-stdin <<< "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Create multi-arch manifest
+        run: |
+          while IFS= read -r tag; do
+            nix shell nixpkgs#regclient -c regctl index create "$tag" \
+              --ref "$tag-amd64" \
+              --ref "$tag-arm64"
           done <<< "${{ steps.meta.outputs.tags }}"

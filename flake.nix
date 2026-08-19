@@ -82,7 +82,7 @@
             default = inoculant;
           };
 
-          checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          checks = pkgs.lib.optionalAttrs (system == "x86_64-linux") {
             nixos = test;
           };
 
