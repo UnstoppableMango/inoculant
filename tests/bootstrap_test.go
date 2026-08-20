@@ -10,19 +10,10 @@ import (
 	inoculant "github.com/unstoppablemango/inoculant"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 var _ = Describe("Bootstrap", func() {
-	var clientset *kubernetes.Clientset
-
-	BeforeEach(func() {
-		var err error
-		clientset, err = kubernetes.NewForConfig(cfg)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 	AfterEach(func() {
 		_ = clientset.CoreV1().ServiceAccounts("kube-system").Delete(ctx, "inoculant", metav1.DeleteOptions{})
 		_ = clientset.RbacV1().ClusterRoles().Delete(ctx, "inoculant", metav1.DeleteOptions{})
