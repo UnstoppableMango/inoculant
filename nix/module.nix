@@ -20,6 +20,8 @@ let
     buildGoApplication
     ;
 
+  inherit (import ./lib.nix) mkInoculant mkContainer;
+
   top = config.services.kubernetes;
   cfg = top.inoculant;
 
@@ -44,8 +46,13 @@ in
     # Built from this module's own `pkgs` arg rather than the flake's package, so the module stays import-able on any nixpkgs pin.
     pkg = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.callPackage ./inoculant.nix {
-        inherit globset version buildGoApplication;
+      default = mkInoculant {
+        inherit
+          pkgs
+          globset
+          version
+          buildGoApplication
+          ;
       };
     };
 
@@ -55,9 +62,9 @@ in
       default = pkgs.callPackage ./tarball.nix {
         inherit (cfg) skopeo;
 
-        container = pkgs.callPackage ./container.nix {
+        container = mkContainer {
+          inherit pkgs nix2container version;
           inoculant = cfg.pkg;
-          inherit nix2container version;
         };
       };
     };
