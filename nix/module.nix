@@ -23,98 +23,19 @@ let
   top = config.services.kubernetes;
   cfg = top.inoculant;
 
-  # Real directory of copies, not symlinks, since the pod bind-mounts only this directory.
-  manifestsDrv = pkgs.runCommand "inoculant-manifests" { } (
-    ''
-      mkdir -p "$out"
-    ''
-    + lib.concatStrings (
-      lib.mapAttrsToList (
-        name: manifest:
-        let
-          # Keys become filenames under $out; a "/" would write into a subpath (or escape $out via "..").
-          checkedName = lib.throwIfNot (
-            !lib.hasInfix "/" name
-          ) "services.kubernetes.inoculant.manifests: key \"${name}\" must be a plain name, not a path" name;
-          # Multiple manifests under one name are written as consecutive JSON documents in one file; internal/manifest.Parse reads them as a stream.
-          content =
-            if lib.isList manifest then
-              lib.concatMapStringsSep "\n" builtins.toJSON manifest
-            else
-              builtins.toJSON manifest;
-        in
-        ''
-          install -Dm444 ${pkgs.writeText "${checkedName}.json" content} "$out/"${lib.escapeShellArg "${checkedName}.json"}
-        ''
-      ) cfg.manifests
-    )
-    + lib.concatMapStrings (src: ''
-      cp -r --no-preserve=mode,ownership ${src} "$out/$(basename ${src})"
-      chmod -R a+rX "$out/$(basename ${src})"
-    '') cfg.manifestFiles
-  );
+  manifestsDrv = import ./manifests.nix {
+    inherit pkgs lib;
+    inherit (cfg) manifests manifestFiles;
+  };
 
-  # Derive allowed GVKs from cfg.manifests, an attrset of manifest or list-of-manifest mirroring addonManager.addons.
-  derivedGVKs = lib.flatten (
-    lib.mapAttrsToList (
-      name: manifest:
-      let
-        items = if lib.isList manifest then manifest else [ manifest ];
-      in
-      map (
-        item:
-        let
-          apiVersion = item.apiVersion or (throw "manifest ${name}: missing apiVersion");
-          kind = item.kind or (throw "manifest ${name}: missing kind");
-          parts = lib.splitString "/" apiVersion;
-          group = if lib.length parts == 2 then lib.head parts else "";
-          ver = lib.last parts;
-        in
-        if
-          (lib.length parts != 1 && lib.length parts != 2)
-          || ver == ""
-          || (lib.length parts == 2 && group == "")
-        then
-          throw "manifest ${name}: invalid apiVersion ${apiVersion}, want VERSION or GROUP/VERSION with non-empty parts"
-        else
-          {
-            inherit group ver kind;
-          }
-      ) items
-    ) cfg.manifests
-  );
-
-  allAllowedGVKs = lib.unique (
-    derivedGVKs
-    ++ cfg.additionalAllowedGVKs
-    ++ lib.optional (cfg.nodeLabels != { }) {
-      group = "";
-      ver = "v1";
-      kind = "Node";
-    }
-  );
-
-  # --allow GROUP/VERSION/KIND args for the bootstrap init container.
-  # Empty group uses the empty string (core API).
-  allowArgs = lib.concatMap (
-    {
-      group,
-      ver,
-      kind,
-    }:
-    [
-      "--allow"
-      "${group}/${ver}/${kind}"
-    ]
-  ) allAllowedGVKs;
-
-  # --label key=value args for the label-node init container.
-  labelArgs = lib.concatLists (
-    lib.mapAttrsToList (name: value: [
-      "--label"
-      "${name}=${value}"
-    ]) cfg.nodeLabels
-  );
+  inherit
+    (import ./gvk.nix {
+      inherit lib;
+      inherit (cfg) manifests additionalAllowedGVKs nodeLabels;
+    })
+    allowArgs
+    labelArgs
+    ;
 in
 {
   options.services.kubernetes.inoculant = {
