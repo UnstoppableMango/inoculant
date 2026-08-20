@@ -9,18 +9,9 @@ import (
 
 	inoculant "github.com/unstoppablemango/inoculant"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 var _ = Describe("Apply", func() {
-	var clientset *kubernetes.Clientset
-
-	BeforeEach(func() {
-		var err error
-		clientset, err = kubernetes.NewForConfig(cfg)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 	It("applies a single YAML ConfigMap", func() {
 		dir := GinkgoT().TempDir()
 		Expect(os.WriteFile(filepath.Join(dir, "cm.yaml"), []byte(`

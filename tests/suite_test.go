@@ -6,15 +6,17 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
 var (
-	ctx     context.Context
-	cfg     *rest.Config
-	testEnv *envtest.Environment
+	ctx       context.Context
+	cfg       *rest.Config
+	clientset *kubernetes.Clientset
+	testEnv   *envtest.Environment
 )
 
 func TestIntegration(t *testing.T) {
@@ -31,6 +33,9 @@ var _ = BeforeSuite(func() {
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
+
+	clientset, err = kubernetes.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {

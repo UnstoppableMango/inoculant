@@ -11,18 +11,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 var _ = Describe("Prune", func() {
-	var clientset *kubernetes.Clientset
-
-	BeforeEach(func() {
-		var err error
-		clientset, err = kubernetes.NewForConfig(cfg)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 	It("deletes an object removed from the manifest set on re-apply", func() {
 		dir := GinkgoT().TempDir()
 		Expect(os.WriteFile(filepath.Join(dir, "a.yaml"), []byte(`

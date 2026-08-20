@@ -7,19 +7,13 @@ import (
 	inoculant "github.com/unstoppablemango/inoculant"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 var _ = Describe("Labels", func() {
-	var clientset *kubernetes.Clientset
 	const nodeName = "inoculant-labels-test-node"
 
 	BeforeEach(func() {
-		var err error
-		clientset, err = kubernetes.NewForConfig(cfg)
-		Expect(err).NotTo(HaveOccurred())
-
-		_, err = clientset.CoreV1().Nodes().Create(ctx, &corev1.Node{
+		_, err := clientset.CoreV1().Nodes().Create(ctx, &corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 		}, metav1.CreateOptions{})
 		Expect(err).NotTo(HaveOccurred())
