@@ -64,12 +64,15 @@
           inherit
             (pkgs.callPackage ./nix {
               inherit (inputs) globset;
-              inherit module nix2container version;
+              inherit nix2container version;
             })
             inoculant
             container
-            test
             ;
+
+          test = pkgs.callPackage ./nix/test.nix {
+            inherit module;
+          };
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {

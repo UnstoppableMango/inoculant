@@ -1,23 +1,26 @@
 {
   globset,
-  module,
   pkgs,
   nix2container,
   version,
 }:
 let
-  inoculant = pkgs.callPackage ./inoculant.nix {
-    inherit globset version;
+  inherit (import ./lib.nix) mkInoculant mkContainer;
+
+  inoculant = mkInoculant {
+    inherit pkgs globset version;
+    inherit (pkgs) buildGoApplication;
   };
 
-  container = pkgs.callPackage ./container.nix {
-    inherit inoculant nix2container version;
-  };
-
-  test = pkgs.callPackage ./test.nix {
-    inherit module;
+  container = mkContainer {
+    inherit
+      pkgs
+      inoculant
+      nix2container
+      version
+      ;
   };
 in
 {
-  inherit inoculant container test;
+  inherit inoculant container;
 }
