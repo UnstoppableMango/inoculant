@@ -115,11 +115,21 @@ func (b *Bootstrapper) rbacRules(gvks []schema.GroupVersionKind) ([]*rbacv1.Poli
 		}
 		seen[pr] = true
 
+		verbs := []string{"get", "create", "patch", "update", "list"}
+		// Kubernetes' RBAC escalation check requires the applier to hold
+		// escalate/bind to create Role(Binding)/ClusterRole(Binding)
+		// manifests that grant permissions the applier doesn't already have.
+		switch resource {
+		case "clusterroles", "roles":
+			verbs = append(verbs, "escalate")
+		case "clusterrolebindings", "rolebindings":
+			verbs = append(verbs, "bind")
+		}
+
 		rules = append(rules, rbacv1.PolicyRule().
 			WithAPIGroups(gvk.Group).
 			WithResources(resource).
-			// TODO: confirm minimal verb set per resource (currently get/create/patch/update/list for all)
-			WithVerbs("get", "create", "patch", "update", "list"))
+			WithVerbs(verbs...))
 	}
 	return rules, nil
 }
