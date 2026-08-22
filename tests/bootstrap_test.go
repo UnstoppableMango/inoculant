@@ -58,4 +58,17 @@ metadata:
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("forbidden"))
 	})
+
+	It("scopes RBAC for a kind that isn't registered on the cluster yet", func() {
+		kubeconfigPath := filepath.Join(GinkgoT().TempDir(), "kubeconfig")
+
+		gvks := []schema.GroupVersionKind{{Group: "example.com", Version: "v1", Kind: "Widget"}}
+		Expect(inoculant.Bootstrap(ctx, cfg, gvks, kubeconfigPath)).To(Succeed())
+
+		role, err := clientset.RbacV1().ClusterRoles().Get(ctx, "inoculant", metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(role.Rules).To(HaveLen(1))
+		Expect(role.Rules[0].APIGroups).To(ConsistOf("example.com"))
+		Expect(role.Rules[0].Resources).To(ConsistOf("widgets"))
+	})
 })
