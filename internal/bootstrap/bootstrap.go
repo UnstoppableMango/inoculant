@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	authv1 "k8s.io/api/authentication/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	corev1 "k8s.io/client-go/applyconfigurations/core/v1"
@@ -103,15 +104,12 @@ func (b *Bootstrapper) rbacRules(gvks []schema.GroupVersionKind) ([]*rbacv1.Poli
 	var rules []*rbacv1.PolicyRuleApplyConfiguration
 
 	for _, gvk := range gvks {
-		mapping, err := b.c.Mapper.RESTMapping(
-			schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind},
-			gvk.Version,
-		)
+		resource, err := b.resolveResource(gvk)
 		if err != nil {
-			return nil, fmt.Errorf("resolve %s: %w", gvk, err)
+			return nil, err
 		}
 
-		pr := policyRule{gvk.Group, mapping.Resource.Resource}
+		pr := policyRule{gvk.Group, resource}
 		if seen[pr] {
 			continue
 		}
@@ -119,11 +117,34 @@ func (b *Bootstrapper) rbacRules(gvks []schema.GroupVersionKind) ([]*rbacv1.Poli
 
 		rules = append(rules, rbacv1.PolicyRule().
 			WithAPIGroups(gvk.Group).
-			WithResources(mapping.Resource.Resource).
+			WithResources(resource).
 			// TODO: confirm minimal verb set per resource (currently get/create/patch/update/list for all)
 			WithVerbs("get", "create", "patch", "update", "list"))
 	}
 	return rules, nil
+}
+
+// resolveResource maps gvk to its plural resource name. It prefers the
+// cluster's live discovery mapping, which is authoritative for anything
+// already registered. If the kind isn't registered yet, it falls back to
+// apimachinery's heuristic Kind->resource guess: bootstrap runs before
+// apply, so a GVK it's asked to scope RBAC for (e.g. a CRD inoculant itself
+// is about to install) may not exist on the cluster yet.
+func (b *Bootstrapper) resolveResource(gvk schema.GroupVersionKind) (string, error) {
+	mapping, err := b.c.Mapper.RESTMapping(
+		schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind},
+		gvk.Version,
+	)
+	if err == nil {
+		return mapping.Resource.Resource, nil
+	}
+	if !meta.IsNoMatchError(err) {
+		return "", fmt.Errorf("resolve %s: %w", gvk, err)
+	}
+
+	klog.InfoS("kind not yet registered, guessing resource name", "gvk", gvk)
+	guessed, _ := meta.UnsafeGuessKindToResource(gvk)
+	return guessed.Resource, nil
 }
 
 func (b *Bootstrapper) applyClusterRoleBinding(ctx context.Context) error {
