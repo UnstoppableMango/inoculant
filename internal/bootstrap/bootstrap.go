@@ -116,14 +116,14 @@ func (b *Bootstrapper) rbacRules(gvks []schema.GroupVersionKind) ([]*rbacv1.Poli
 		seen[pr] = true
 
 		verbs := []string{"get", "create", "patch", "update", "list"}
-		// Kubernetes' RBAC escalation check requires the applier to hold
-		// escalate/bind to create Role(Binding)/ClusterRole(Binding)
-		// manifests that grant permissions the applier doesn't already have.
-		switch resource {
-		case "clusterroles", "roles":
-			verbs = append(verbs, "escalate")
-		case "clusterrolebindings", "rolebindings":
-			verbs = append(verbs, "bind")
+		// Kubernetes' RBAC escalation check is keyed on the referenced
+		// Role/ClusterRole, not the Binding: creating a Role/ClusterRole
+		// with rules the applier doesn't hold requires "escalate" on
+		// roles/clusterroles, and creating a (Cluster)RoleBinding that
+		// references one requires "bind" on that same roles/clusterroles
+		// resource, not on role bindings.
+		if resource == "clusterroles" || resource == "roles" {
+			verbs = append(verbs, "escalate", "bind")
 		}
 
 		rules = append(rules, rbacv1.PolicyRule().
