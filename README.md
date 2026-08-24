@@ -47,6 +47,13 @@ sequenceDiagram
     Note over K: pod complete, no watcher left running
 ```
 
+## Multi-node clusters
+
+Each node runs its own inoculant instance independently.
+There is no leader election and instances don't coordinate.
+This is intentional: applies are server-side apply, idempotent and commutative, and the Kubernetes apiserver already serializes conflicting writes via optimistic concurrency (`resourceVersion`).
+Leader election would only help if concurrent writers raced non-convergent side effects, which doesn't happen here, and it would add a dependency plus a startup bottleneck that fights the one-shot, per-node model.
+
 ## Commands
 
 ```bash
