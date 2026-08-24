@@ -30,8 +30,9 @@ apply.go             # package inoculant: Apply(ctx, dir, restConfig) — thin w
 bootstrap.go         # package inoculant: Bootstrap(ctx, restConfig, gvks, output) — thin wrapper over internal/bootstrap
 internal/
   client/            # dynamic client + RESTMapper construction
-  apply/              # walks dir, server-side applies YAML/JSON manifests, prunes removed ones
+  apply/              # walks dir, server-side applies YAML/JSON manifests (and kustomize overlays), prunes removed ones
   bootstrap/          # creates scoped RBAC (SA/ClusterRole/ClusterRoleBinding) limited to allowed GVKs, writes a token-scoped kubeconfig; runs as an init container
+  kustomize/          # renders kustomization directories (sigs.k8s.io/kustomize/api) into unstructured objects
   manifest/           # manifest parsing (YAML/JSON → unstructured)
 tests/
   suite_test.go   # envtest bootstrap (controller-runtime etcd + apiserver)
@@ -76,4 +77,4 @@ See GOALS.md for full rationale.
 
 ## Roadmap (from GOALS.md)
 
-v1: raw manifest directories (YAML/JSON) + scoped bootstrap RBAC + apply-set pruning. Post-v1: Helm (OCI), Kustomize. Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.
+v1: raw manifest directories (YAML/JSON) + scoped bootstrap RBAC + apply-set pruning. Done, plus Kustomize overlay support. Post-v1: Helm (OCI). Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.

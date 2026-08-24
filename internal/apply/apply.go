@@ -16,8 +16,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 
 	"github.com/unstoppablemango/inoculant/internal/client"
+	"github.com/unstoppablemango/inoculant/internal/kustomize"
 	"github.com/unstoppablemango/inoculant/internal/manifest"
 )
 
@@ -55,12 +57,19 @@ func (a *Applier) Apply(ctx context.Context, dir string) error {
 
 	klog.InfoS("applying manifests", "dir", resolved)
 
+	fSys := filesys.MakeFsOnDisk()
 	desired := map[objectKey]struct{}{}
 	if err := filepath.WalkDir(resolved, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
+			if kustomize.IsRoot(fSys, path) {
+				if err := a.applyKustomization(ctx, path, desired); err != nil {
+					return err
+				}
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -90,6 +99,21 @@ func (a *Applier) applyFile(ctx context.Context, path string, desired map[object
 		return fmt.Errorf("parse %s: %w", path, err)
 	}
 
+	return a.applyObjects(ctx, objs, desired)
+}
+
+func (a *Applier) applyKustomization(ctx context.Context, dir string, desired map[objectKey]struct{}) error {
+	klog.InfoS("building kustomization", "dir", dir)
+
+	objs, err := kustomize.Build(dir)
+	if err != nil {
+		return err
+	}
+
+	return a.applyObjects(ctx, objs, desired)
+}
+
+func (a *Applier) applyObjects(ctx context.Context, objs []*unstructured.Unstructured, desired map[objectKey]struct{}) error {
 	for _, obj := range objs {
 		if err := a.applyObject(ctx, obj, desired); err != nil {
 			return err
