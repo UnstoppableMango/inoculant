@@ -30,14 +30,17 @@ apply.go             # package inoculant: Apply(ctx, dir, restConfig) — thin w
 bootstrap.go         # package inoculant: Bootstrap(ctx, restConfig, gvks, output) — thin wrapper over internal/bootstrap
 internal/
   client/            # dynamic client + RESTMapper construction
-  apply/              # walks dir, server-side applies YAML/JSON manifests (and kustomize overlays), prunes removed ones
+  apply/              # walks dir, server-side applies YAML/JSON manifests (and kustomize overlays), installs/upgrades Helm charts, prunes removed ones
   bootstrap/          # creates scoped RBAC (SA/ClusterRole/ClusterRoleBinding) limited to allowed GVKs, writes a token-scoped kubeconfig; runs as an init container
   kustomize/          # renders kustomization directories (sigs.k8s.io/kustomize/api) into unstructured objects
+  helm/               # installs/upgrades local Helm chart directories (helm.sh/helm/v3) as releases, Secret-backed storage; excluded from prune (see internal/apply/apply.go)
   manifest/           # manifest parsing (YAML/JSON → unstructured)
 tests/
   suite_test.go   # envtest bootstrap (controller-runtime etcd + apiserver)
   apply_test.go   # Ginkgo BDD tests against live envtest cluster
   bootstrap_test.go  # Ginkgo BDD tests for bootstrap/RBAC flow
+  kustomize_test.go  # Ginkgo BDD tests for kustomize overlay support
+  helm_test.go    # Ginkgo BDD tests for Helm chart install/upgrade/prune-exclusion
 nix/
   default.nix     # wires inoculant + container + test packages
   inoculant.nix   # buildGoApplication (static binary)
@@ -77,4 +80,4 @@ See GOALS.md for full rationale.
 
 ## Roadmap (from GOALS.md)
 
-v1: raw manifest directories (YAML/JSON) + scoped bootstrap RBAC + apply-set pruning. Done, plus Kustomize overlay support. Post-v1: Helm (OCI). Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.
+v1: raw manifest directories (YAML/JSON) + scoped bootstrap RBAC + apply-set pruning. Done, plus Kustomize overlay support and Helm chart support (local chart directories, real releases via the Helm SDK). Post-v1: Helm OCI registry pulling. Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.

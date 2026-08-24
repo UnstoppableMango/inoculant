@@ -16,7 +16,10 @@ Early development (v0.0.1). See [GOALS.md](GOALS.md) for full rationale.
 
 1. Runs as a kubelet static pod with two containers: `bootstrap` (init) and `apply`.
 2. `bootstrap` creates scoped RBAC (ServiceAccount, ClusterRole, ClusterRoleBinding) limited to a set of allowed GVKs, then writes a token-scoped kubeconfig for the `apply` container.
-3. `apply` walks a manifest directory (YAML/JSON) and server-side applies each resource to the cluster.
+3. `apply` walks a manifest directory and, for each entry, applies it according to what it finds:
+   - Plain YAML/JSON manifests are server-side applied directly.
+   - A directory containing a `kustomization.yaml`/`.yml`/`Kustomization` is built with kustomize and the result is server-side applied.
+   - A directory containing a `Chart.yaml` is installed (or upgraded, if already released) as a Helm release, named after the directory's basename, with any `values.yaml` in the chart picked up automatically. Helm tracks this release itself (Secret-based storage); it is not part of inoculant's server-side-apply prune set.
 4. The pod exits. No watcher, no ongoing reconciliation.
 
 Re-applying is driven by kubelet itself: it derives a static pod's identity from a hash of its manifest file, so changing manifest content or the inoculant image both trigger a fresh run.
@@ -70,6 +73,6 @@ Dev shell: `nix develop` (provides Go, gopls, ginkgo, gomod2nix, formatters).
 
 ## Status
 
-v1 scope: raw manifest directories + scoped bootstrap RBAC.
-Post-v1: Helm (OCI), Kustomize, apply-set pruning.
+v1 scope: raw manifest directories + scoped bootstrap RBAC + apply-set pruning. Done, plus Kustomize overlay support and Helm chart support (local chart directories, real releases).
+Post-v1: Helm OCI registry pulling.
 Non-goals: multi-cluster, secret management, dependency ordering, ongoing drift reconciliation.
