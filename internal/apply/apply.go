@@ -19,12 +19,16 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 
 	"github.com/unstoppablemango/inoculant/internal/client"
+	"github.com/unstoppablemango/inoculant/internal/helm"
 	"github.com/unstoppablemango/inoculant/internal/kustomize"
 	"github.com/unstoppablemango/inoculant/internal/manifest"
 )
 
 // managedByLabel marks every object inoculant applies, so a prune pass can
 // find candidates for deletion without needing separate tracking state.
+// Helm chart directories (see internal/helm) are deliberately excluded:
+// Helm tracks its own release lifecycle via Secret-based storage and never
+// stamps this label, so released objects are never prune candidates.
 const (
 	managedByLabel = "inoculant.unmango.dev/managed-by"
 	managedByValue = "inoculant"
@@ -70,6 +74,12 @@ func (a *Applier) Apply(ctx context.Context, dir string) error {
 				}
 				return filepath.SkipDir
 			}
+			if helm.IsRoot(fSys, path) {
+				if err := a.applyHelmChart(ctx, path); err != nil {
+					return err
+				}
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -111,6 +121,23 @@ func (a *Applier) applyKustomization(ctx context.Context, dir string, desired ma
 	}
 
 	return a.applyObjects(ctx, objs, desired)
+}
+
+// applyHelmChart installs or upgrades the Helm release rooted at dir.
+// Unlike applyFile/applyKustomization, this does not populate desired:
+// Helm tracks its own release lifecycle via Secret-based storage
+// (internal/helm), so its objects never carry managedByLabel and are
+// never prune candidates.
+func (a *Applier) applyHelmChart(ctx context.Context, dir string) error {
+	rel, err := helm.Install(ctx, a.c, dir, metav1.NamespaceDefault)
+	if err != nil {
+		return fmt.Errorf("apply helm chart %s: %w", dir, err)
+	}
+
+	klog.InfoS("helm release applied",
+		"name", rel.Name, "namespace", rel.Namespace,
+		"revision", rel.Version, "status", rel.Info.Status)
+	return nil
 }
 
 func (a *Applier) applyObjects(ctx context.Context, objs []*unstructured.Unstructured, desired map[objectKey]struct{}) error {

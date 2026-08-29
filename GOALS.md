@@ -31,9 +31,12 @@ in inoculant itself.
 
 ### 3. Helm support (post-v1)
 
-- Install and upgrade Helm releases
-- Pull charts from OCI registries
-- Support air-gapped / local chart bundles (no internet required)
+- Install and upgrade Helm releases. Done — local chart directories
+  (containing a `Chart.yaml`) are installed/upgraded via the Helm SDK,
+  with release state tracked in Helm's own Secret-based storage.
+- Support air-gapped / local chart bundles (no internet required). Done —
+  charts are loaded from disk; no registry access is required.
+- Pull charts from OCI registries. Still post-v1.
 
 ### 4. Kustomize support (post-v1)
 
