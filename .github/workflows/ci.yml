@@ -32,6 +32,12 @@ jobs:
           name: unstoppablemango
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
+      # Read-only: mangopkgs is where skopeo-nix2container comes from, we
+      # don't publish to it.
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: mangopkgs
+
       - run: nix flake check
       - run: nix build .#
 
@@ -58,6 +64,12 @@ jobs:
         with:
           name: unstoppablemango
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      # Read-only: mangopkgs is where skopeo-nix2container comes from, we
+      # don't publish to it.
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: mangopkgs
 
       - run: nix develop -c make test
 
@@ -89,6 +101,12 @@ jobs:
         with:
           name: unstoppablemango
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      # Read-only: mangopkgs is where skopeo-nix2container comes from, we
+      # don't publish to it.
+      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: mangopkgs
 
       - run: nix build .#container
 
