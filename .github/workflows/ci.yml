@@ -27,14 +27,14 @@ jobs:
           extra_nix_config: |
             allow-import-from-derivation = false
 
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: unstoppablemango
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       # Read-only: mangopkgs is where skopeo-nix2container comes from, we
       # don't publish to it.
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: mangopkgs
 
@@ -60,14 +60,14 @@ jobs:
           extra_nix_config: |
             allow-import-from-derivation = false
 
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: unstoppablemango
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       # Read-only: mangopkgs is where skopeo-nix2container comes from, we
       # don't publish to it.
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: mangopkgs
 
@@ -97,14 +97,14 @@ jobs:
           extra_nix_config: |
             allow-import-from-derivation = false
 
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: unstoppablemango
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       # Read-only: mangopkgs is where skopeo-nix2container comes from, we
       # don't publish to it.
-      - uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: mangopkgs
 
