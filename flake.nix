@@ -18,7 +18,7 @@
     # independently means rebuilding skopeo from source.
     mangopkgs.url = "github:unmango/pkgs";
     nixpkgs.follows = "mangopkgs/nixpkgs";
-    systems.url = "github:nix-systems/triplet";
+    systems.url = "github:UnstoppableMango/nix-systems";
 
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
@@ -54,7 +54,10 @@
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
-      imports = with inputs; [ treefmt-nix.flakeModule ];
+      imports = with inputs; [
+        systems.flakeModule
+        treefmt-nix.flakeModule
+      ];
 
       flake.nixosModules.default = module;
 
