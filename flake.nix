@@ -47,7 +47,8 @@
 
     # No nixpkgs follow: kubepkgs' own pin keeps its derivations identical to
     # what its CI pushes to unstoppablemango.cachix.org, so Kubernetes binaries
-    # substitute instead of compiling.
+    # substitute instead of compiling. x86_64-linux is not pushed yet
+    # (unmango/kubepkgs#50) and still compiles.
     kubepkgs = {
       url = "github:unmango/kubepkgs";
       inputs.systems.follows = "systems";
