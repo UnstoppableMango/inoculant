@@ -136,8 +136,8 @@
               ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ containerd ];
 
             # https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
-            # kubepkgs builds etcd and kube-apiserver for Linux only.
-            TEST_ASSET_ETCD = lib.optionalString pkgs.stdenv.hostPlatform.isLinux (lib.getExe k8s.deps.etcd);
+            # kubepkgs builds kube-apiserver for Linux only.
+            TEST_ASSET_ETCD = lib.getExe k8s.deps.etcd;
             TEST_ASSET_KUBECTL = lib.getExe k8s.kubectl;
             TEST_ASSET_KUBE_APISERVER = lib.optionalString pkgs.stdenv.hostPlatform.isLinux (
               lib.getExe k8s.kube-apiserver
