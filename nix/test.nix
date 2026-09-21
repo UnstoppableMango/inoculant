@@ -2,6 +2,8 @@
   module,
   testers,
   kubectl,
+  kubernetes,
+  etcd,
 }:
 
 testers.nixosTest {
@@ -11,7 +13,10 @@ testers.nixosTest {
     {
       imports = [ module ];
 
+      services.etcd.package = etcd;
+
       services.kubernetes = {
+        package = kubernetes;
         inoculant.enable = true;
         inoculant.manifests = {
           marker = {

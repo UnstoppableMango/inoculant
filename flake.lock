@@ -203,11 +203,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789766651,
-        "narHash": "sha256-xCgimWY+tucgdgmv6Ob2LUx6m7LH6t0YubJZowD/IcU=",
+        "lastModified": 1789996072,
+        "narHash": "sha256-mlyJYlPwzyL1hnmQ9ElG6O2rx9KH4t1VMWh/NPLePto=",
         "owner": "unmango",
         "repo": "kubepkgs",
-        "rev": "c6927571174cbac898b4f5631259fa7c861f751d",
+        "rev": "c8a9515a8e2cfe0c2e215e36b057e44d83300ffb",
         "type": "github"
       },
       "original": {

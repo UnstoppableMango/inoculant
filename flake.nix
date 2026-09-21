@@ -100,7 +100,8 @@
 
           test = pkgs.callPackage ./nix/test.nix {
             inherit module;
-            inherit (k8s) kubectl;
+            inherit (k8s) kubectl kubernetes;
+            etcd = k8s.deps.etcd;
           };
         in
         {
