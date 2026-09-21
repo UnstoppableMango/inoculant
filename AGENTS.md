@@ -52,7 +52,7 @@ nix/
 flake.nix         # dev shell, treefmt, exports flake.nixosModules.default; Linux-only check runs nix/test.nix
 ```
 
-**Testing**: Ginkgo v2 + Gomega. Tests spin up real etcd + kube-apiserver via `controller-runtime/envtest` — no mocks. envtest needs `TEST_ASSET_ETCD`/`TEST_ASSET_KUBECTL`/`TEST_ASSET_KUBE_APISERVER` env vars — set only in the `nix develop` shell; `make test` fails outside it. NixOS integration test (`nix/test.nix`) boots a VM, waits for node Ready, verifies the inoculant image is seeded into containerd.
+**Testing**: Ginkgo v2 + Gomega. Tests spin up real etcd + kube-apiserver via `controller-runtime/envtest` — no mocks. envtest needs `TEST_ASSET_ETCD`/`TEST_ASSET_KUBECTL`/`TEST_ASSET_KUBE_APISERVER` env vars — set only in the `nix develop` shell; `make test` fails outside it. The binaries come from kubepkgs, pinned to the Kubernetes minor matching `k8s.io/*` in `go.mod`; bump both together. NixOS integration test (`nix/test.nix`) boots a VM, waits for node Ready, verifies the inoculant image is seeded into containerd.
 
 **Build**: Nix-first. Go binary built with `gomod2nix`-generated Nix derivation. After changing `go.mod`, run `make tidy` (regenerates `go.sum` + `nix/gomod2nix.toml`).
 

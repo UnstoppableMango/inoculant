@@ -5,9 +5,11 @@
     allow-import-from-derivation = false;
     extra-substituters = [
       "https://mangopkgs.cachix.org"
+      "https://unstoppablemango.cachix.org"
     ];
     extra-trusted-public-keys = [
       "mangopkgs.cachix.org-1:uJ5FgSbOg1uiXLcL0gBh1lO+y3KVuthy6UeOFYR1fLk="
+      "unstoppablemango.cachix.org-1:m7uEI6X1Ov8DyFWJQX4WsRFRWFuzRW5c/Xms8ZaP74U="
     ];
   };
 
@@ -42,6 +44,17 @@
     };
 
     nix2container.follows = "mangopkgs/nix2container";
+
+    # No nixpkgs follow: kubepkgs' own pin keeps its derivations identical to
+    # what its CI pushes to unstoppablemango.cachix.org, so Kubernetes binaries
+    # substitute instead of compiling.
+    kubepkgs = {
+      url = "github:unmango/kubepkgs";
+      inputs.systems.follows = "systems";
+      inputs.flake-parts.follows = "flake-parts";
+      inputs.globset.follows = "globset";
+      inputs.treefmt-nix.follows = "treefmt-nix";
+    };
   };
 
   outputs =
@@ -72,6 +85,9 @@
         let
           inherit (inputs'.nix2container.packages) nix2container;
 
+          # Keep the minor in step with the k8s.io/* client libraries in go.mod.
+          k8s = inputs'.kubepkgs.legacyPackages.kubernetes."1.37";
+
           inherit
             (pkgs.callPackage ./nix {
               inherit (inputs) globset;
@@ -83,6 +99,7 @@
 
           test = pkgs.callPackage ./nix/test.nix {
             inherit module;
+            inherit (k8s) kubectl;
           };
         in
         {
@@ -117,9 +134,12 @@
               ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ containerd ];
 
             # https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
-            TEST_ASSET_ETCD = "${pkgs.etcd}/bin/etcd";
-            TEST_ASSET_KUBECTL = "${pkgs.kubectl}/bin/kubectl";
-            TEST_ASSET_KUBE_APISERVER = lib.optionalString pkgs.stdenv.hostPlatform.isLinux "${pkgs.kubernetes}/bin/kube-apiserver";
+            # kubepkgs builds etcd and kube-apiserver for Linux only.
+            TEST_ASSET_ETCD = lib.optionalString pkgs.stdenv.hostPlatform.isLinux (lib.getExe k8s.deps.etcd);
+            TEST_ASSET_KUBECTL = lib.getExe k8s.kubectl;
+            TEST_ASSET_KUBE_APISERVER = lib.optionalString pkgs.stdenv.hostPlatform.isLinux (
+              lib.getExe k8s.kube-apiserver
+            );
           };
 
           treefmt.programs = {
