@@ -1,4 +1,8 @@
-{ module, testers }:
+{
+  module,
+  testers,
+  kubectl,
+}:
 
 testers.nixosTest {
   name = "nixos-integration";
@@ -70,7 +74,7 @@ testers.nixosTest {
       };
 
       environment.systemPackages = [
-        pkgs.kubectl
+        kubectl
         pkgs.containerd
       ];
 
