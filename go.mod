@@ -9,7 +9,7 @@ require (
 	github.com/onsi/gomega v1.43.0
 	github.com/spf13/cobra v1.10.2
 	github.com/unmango/go v0.16.6
-	helm.sh/helm/v3 v3.22.0
+	helm.sh/helm/v4 v4.3.0
 	helm.sh/helm/v4 v4.3.0
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
