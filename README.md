@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built with Nix](https://img.shields.io/badge/built%20with-Nix-5277C3.svg?logo=nixos&logoColor=white)](https://nixos.org)
 [![Last Commit](https://img.shields.io/github/last-commit/UnstoppableMango/inoculant)](https://github.com/UnstoppableMango/inoculant/commits/main)
+[![Hercules CI](https://hercules-ci.com/api/v1/site/github/account/UnstoppableMango/project/inoculant/badge)](https://hercules-ci.com/github/UnstoppableMango/inoculant)
 
 A one-shot Kubernetes bootstrapping tool.
 It applies static resources to a cluster and exits.
